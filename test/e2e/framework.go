@@ -24,8 +24,10 @@ import (
 	"time"
 
 	"k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -44,7 +46,11 @@ const testNamespace string = "antrea-test"
 
 const defaultContainerName string = "busybox"
 
+const defaultNginxContainerName string = "nginx-container"
+
 const podNameSuffixLength int = 8
+
+const svcNameSuffixLength int = 8
 
 const OVSContainerName string = "antrea-ovs"
 
@@ -611,6 +617,138 @@ func validatePodIP(podNetworkCIDR, podIP string) (bool, error) {
 	return cidr.Contains(ip), nil
 }
 
+// createNginxPodOnNode creates a nginx pod listening for traffic.
+func (data *TestData) createNginxPodOnNode(podName string, nodeName string) error {
+	podSpec := v1.PodSpec{
+		Containers: []v1.Container{
+			{
+				Name:            defaultNginxContainerName,
+				Image:           "nginx",
+				ImagePullPolicy: v1.PullIfNotPresent,
+			},
+		},
+		RestartPolicy: v1.RestartPolicyNever,
+	}
+	if nodeName != "" {
+		podSpec.NodeSelector = map[string]string{
+			"kubernetes.io/hostname": nodeName,
+		}
+	}
+	if nodeName == masterNodeName() {
+		// tolerate NoSchedule taint if we want Pod to run on master node
+		noScheduleToleration := v1.Toleration{
+			Key:      "node-role.kubernetes.io/master",
+			Operator: v1.TolerationOpExists,
+			Effect:   v1.TaintEffectNoSchedule,
+		}
+		podSpec.Tolerations = []v1.Toleration{noScheduleToleration}
+	}
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: podName,
+			Labels: map[string]string{
+				"pod-name": podName,
+				"app":      "nginx",
+			},
+		},
+		Spec: podSpec,
+	}
+	if _, err := data.clientset.CoreV1().Pods(testNamespace).Create(pod); err != nil {
+		return err
+	}
+	return nil
+}
+
+// createNginxService exposes nginx as a service.
+func (data *TestData) createNginxService(podName string, svcName string) error {
+	port := 80
+	_, err := data.clientset.CoreV1().Services(testNamespace).Create(&v1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: svcName,
+			Labels: map[string]string{
+				"app": "nginx",
+			},
+		},
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{{
+				Port:       int32(port),
+				TargetPort: intstr.IntOrString{Type: 0, IntVal: int32(port)},
+			}},
+			Selector: map[string]string{
+				"app": "nginx",
+			},
+		},
+	})
+	return err
+}
+
+// deleteNginxService deletes the nginx service
+func (data *TestData) deleteNginxService(svcName string) error {
+	if err := data.clientset.CoreV1().Services(testNamespace).Delete(svcName, nil); err != nil {
+		return fmt.Errorf("unable to cleanup svc %v: %v", svcName, err)
+	}
+	return nil
+}
+
+// createNetworkPolicyToTestIPBlockWithExcept creates a network policy with IPBlock's Except .
+// 192.168.1.2 ~ 192.168.1.255 allowd
+// 192.168.1.0 ~ 192.168.1.1 rejected.
+func (data *TestData) createNetworkPolicyToTestIPBlockWithExcept(networkPolicyName string, exceptIP string) (*networkingv1.NetworkPolicy, error) {
+	policy := &networkingv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: networkPolicyName,
+		},
+		Spec: networkingv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "nginx",
+				},
+			},
+			Ingress: []networkingv1.NetworkPolicyIngressRule{
+				{
+					From: []networkingv1.NetworkPolicyPeer{
+						{
+							IPBlock: &networkingv1.IPBlock{
+								CIDR: clusterInfo.podNetworkCIDR,
+								Except: []string{
+									exceptIP + "/32",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	return data.clientset.NetworkingV1().NetworkPolicies(testNamespace).Create(policy)
+}
+
+// networkPolicyWaitForExisting polls the K8s apiserver until the specified network policy is found (in the test Namespace).
+func (data *TestData) networkPolicyWaitForExisting(timeout time.Duration, name string) (*networkingv1.NetworkPolicy, error) {
+	err := wait.Poll(1*time.Second, timeout, func() (bool, error) {
+		if _, err := data.clientset.NetworkingV1().NetworkPolicies(testNamespace).Get(name, metav1.GetOptions{}); err != nil {
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, fmt.Errorf("error when getting NetworkPolicy '%s': %v", name, err)
+		} else {
+			return true, nil
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	return data.clientset.NetworkingV1().NetworkPolicies(testNamespace).Get(name, metav1.GetOptions{})
+}
+
+// deleteNetworkpolicy deletes the network policy
+func (data *TestData) deleteNetworkpolicy(policy *networkingv1.NetworkPolicy) error {
+	if err := data.clientset.NetworkingV1().NetworkPolicies(policy.Namespace).Delete(policy.Name, nil); err != nil {
+		return fmt.Errorf("unable to cleanup policy %v: %v", policy.Name, err)
+	}
+	return nil
+}
+
 // A DNS-1123 subdomain must consist of lower case alphanumeric characters
 var lettersAndDigits = []rune("abcdefghijklmnopqrstuvwxyz0123456789")
 
@@ -625,6 +763,10 @@ func randSeq(n int) string {
 
 func randPodName(prefix string) string {
 	return prefix + randSeq(podNameSuffixLength)
+}
+
+func randSvcName(prefix string) string {
+	return prefix + randSeq(svcNameSuffixLength)
 }
 
 // Run the provided command in the specified Container for the give Pod and returns the contents of
@@ -693,6 +835,12 @@ func (data *TestData) forAllAntreaPods(fn func(nodeName, podName string) error) 
 
 func (data *TestData) runPingCommandFromTestPod(podName string, targetIP string, count int) error {
 	cmd := []string{"ping", "-c", strconv.Itoa(count), targetIP}
+	_, _, err := data.runCommandFromPod(testNamespace, podName, defaultContainerName, cmd)
+	return err
+}
+
+func (data *TestData) runWgetCommandFromTestPod(podName string, svcName string) error {
+	cmd := []string{"wget", "--spider", "--timeout=1", svcName}
 	_, _, err := data.runCommandFromPod(testNamespace, podName, defaultContainerName, cmd)
 	return err
 }
