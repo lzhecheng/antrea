@@ -107,3 +107,19 @@ jobs:
 
     - name: Check tidy
       run: make test-tidy
+
+  conformance:
+    name: Conformance test
+    runs-on: [ubuntu-18.04]
+    steps:
+
+    - name: Set up Go 1.12
+      uses: actions/setup-go@v1
+      with:
+        go-version: 1.12
+
+    - name: Check-out code
+      uses: actions/checkout@v1
+
+    - name: Run conformance tests
+      run: make test-conformance

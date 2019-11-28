@@ -105,6 +105,11 @@ test-tidy:
 	@echo "===> Checking go.mod tidiness <==="
 	@GO=$(GO) $(CURDIR)/hack/tidy-check.sh
 
+test-conformance:
+	@echo
+	@echo "===> Running conformance tests <==="
+	@GO=$(GO) $(CURDIR)/hack/conformance.sh
+
 .PHONY: fmt
 fmt:
 	@echo
