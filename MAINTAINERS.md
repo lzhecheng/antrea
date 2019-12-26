@@ -1,4 +1,4 @@
-# Antrea Maintainers
+1# Antrea Maintainers
 
 This is the current list of maintainers for the Antrea project. The maintainer
 role is described in [GOVERNANCE.md](GOVERNANCE.md).
