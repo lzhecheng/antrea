@@ -1,0 +1,55 @@
+- job-template:
+    name: '{name}-{test_name}-for-pull-request'
+    node: '{node}'
+    block-downstream: false
+    block-upstream: false
+    builders: '{builders}'
+    concurrent: true
+    description: '{description}'
+    disabled: false
+    project-type: freestyle
+    properties:
+    - build-discarder:
+        artifact-days-to-keep: -1
+        artifact-num-to-keep: -1
+        days-to-keep: 7
+        num-to-keep: 30
+    - github:
+        url: '{github_url}'
+    - throttle:
+        max-per-node: 1
+        max-total: 0
+        categories: '{throttle_concurrent_builds_category}'
+        option: category
+        enabled: '{throttle_concurrent_builds_enabled}'
+    publishers: []
+    scm:
+    - git:
+        branches:
+        - ${{sha1}}
+        credentials-id: '{git_credentials_id}'
+        name: origin
+        refspec: +refs/heads/*:refs/remotes/origin/* +refs/pull/${{ghprbPullId}}/*:refs/remotes/origin/pr/${{ghprbPullId}}/*
+        url: '{github_url}'
+        wipe-workspace: true
+    triggers:
+    - raw: '{no_commit_status}'
+    - github-pull-request:
+        admin-list: '{admin_list}'
+        allow-whitelist-orgs-as-admins: '{allow_whitelist_orgs_as_admins}'
+        auth-id: '{ghpr_auth}'
+        auto-close-on-fail: false
+        build-desc-template: null
+        github-hooks: true
+        only-trigger-phrase: '{only_trigger_phrase}'
+        org-list: '{org_list}'
+        permit-all: '{trigger_permit_all}'
+        trigger-phrase: '{trigger_phrase}'
+        white-list-target-branches: []
+        white-list: '{white_list}'
+        status-context: '{status_context}'
+        status-url: '{status_url}'
+        success-status: '{success_status}'
+        failure-status: '{failure_status}'
+        error-status: '{error_status}'
+    wrappers: []
