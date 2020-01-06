@@ -1,4 +1,37 @@
 - builder:
+    name: builder-list-tests
+    builders:
+      - shell: |-
+          set +x
+
+          rm -f COMMENT_EXIST
+          rm -f body.json
+          echo "{{\"body\": \"Thanks for your PR.\\\nUnit tests and code linters are run automatically every time the PR is updated.\\\nE2e, conformance and network policy tests can only be triggered by a member of the vmware-tanzu organization. Regular contributors to the project should join the org.\\\n\\\nThe following commands are available:\\\n* \`/test-e2e\`: to trigger e2e tests.\\\n* \`/skip-e2e\`: to skip e2e tests.\\\n* \`/test-conformance\`: to trigger conformance tests.\\\n* \`/skip-conformance\`: to skip conformance tests.\\\n* \`/test-networkpolicy\`: to trigger networkpolicy tests.\\\n* \`/skip-networkpolicy\`: to skip networkpolicy tests.\\\n* \`/test-all\`: to trigger all tests.\\\n* \`/skip-all\`: to skip all tests.\\\n\\\nThese commands can only be run by members of the vmware-tanzu organization.\"}}" > body.json
+
+          B="$(cat body.json | jq .body)"
+
+          # read -r: preserve \n from the input line.
+          curl "https://api.github.com/repos/{org_repo}/issues/${{ghprbPullId}}/comments" | jq '.[].body' | while read -r LINE
+          do
+            if [ "$LINE" = "$B" ]
+            then
+              echo Found existing comment!
+              # pipeline runs in subshell, setting variable won't have effect on the parent process
+              # so use a file as a flag
+              touch COMMENT_EXIST
+              break
+            fi
+          done
+
+          if !(test -f COMMENT_EXIST)
+          then
+            echo Ask the question!
+            curl -u "${{GH_CREDENTIAL}}" -X POST -H 'Content-type: application/json' -d @body.json "https://api.github.com/repos/{org_repo}/issues/${{ghprbPullId}}/comments"
+          else
+            echo Question already asked!
+          fi
+
+- builder:
     name: builder-pending-label
     builders:
       - shell: 'exit 1 # fail on purpose'
@@ -66,11 +99,13 @@
           test_rc=$?
           set -e
 
+          tar -zcf antrea-test-logs.tar.gz antrea-test-logs
+
           echo ====== Cleanup Antrea Installation ======
 
           for antrea_yml in /var/lib/jenkins/*.yml
           do
-            kubectl delete -f ${antrea_yaml} --ignore-not-found=true || true
+            kubectl delete -f ${antrea_yml} --ignore-not-found=true || true
           done
 
           kubectl delete ns antrea-test || true
@@ -123,7 +158,7 @@
 
           for antrea_yml in /var/lib/jenkins/*.yml
           do
-            kubectl delete -f ${antrea_yml} --ignore-not-found=true || true
+            kubectl delete -f ${{antrea_yml}} --ignore-not-found=true || true
           done
           
           kubectl delete ns antrea-test || true
