@@ -123,7 +123,7 @@
 
           for antrea_yml in /var/lib/jenkins/*.yml
           do
-            kubectl delete -f ${antrea_yaml} --ignore-not-found=true || true
+            kubectl delete -f ${antrea_yml} --ignore-not-found=true || true
           done
           
           kubectl delete ns antrea-test || true
