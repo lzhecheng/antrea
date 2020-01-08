@@ -1,4 +1,12 @@
 - builder:
+    name: builder-job-updater
+    builders:
+      - shell: |-
+          cp /var/jenkins_home/tmp/defaults.yaml ci/jenkins/jobs
+          jenkins-jobs update -r ci/jenkins/jobs
+          rm ci/jenkins/jobs/defaults.yaml
+
+- builder:
     name: builder-list-tests
     builders:
       - shell: |-
