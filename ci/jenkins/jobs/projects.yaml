@@ -70,7 +70,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: e2e-pending-label
@@ -99,7 +99,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: e2e
@@ -137,7 +137,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: e2e-skip
@@ -167,7 +167,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: conformance-pending-label
@@ -196,7 +196,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: conformance
@@ -229,7 +229,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: conformance-skip
@@ -259,7 +259,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: networkpolicy-pending-label
@@ -288,7 +288,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: networkpolicy
@@ -321,7 +321,7 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
       - '{name}-{test_name}-for-pull-request':
           test_name: networkpolicy-skip
@@ -351,5 +351,5 @@
           branches:
           - ${{sha1}}
           included_regions: []
-          cron: '* * * * *'
+          cron: ''
           ignore_post_commit_hooks: null
