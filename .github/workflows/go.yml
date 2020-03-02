@@ -14,6 +14,7 @@ jobs:
   test-unit:
     name: Unit test
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
 
     - name: Set up Go 1.13
@@ -31,6 +32,7 @@ jobs:
   golangci-lint:
     name: Golangci-lint
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
     - name: Set up Go 1.13
       uses: actions/setup-go@v1
@@ -45,6 +47,7 @@ jobs:
   bin:
     name: Build Antrea binaries
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
 
     - name: Set up Go 1.13
@@ -61,6 +64,7 @@ jobs:
   antctl:
     name: Build antctl for macOS, Linux and Windows
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
 
       - name: Set up Go 1.13
@@ -78,6 +82,7 @@ jobs:
   codegen:
     name: Check code generation
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
 
     - name: Set up Go 1.13
@@ -95,6 +100,7 @@ jobs:
   manifest:
     name: Check manifest
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
 
     - name: Set up Go 1.13
@@ -112,6 +118,7 @@ jobs:
   tidy:
     name: Check go.mod tidy
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
 
     - name: Set up Go 1.13

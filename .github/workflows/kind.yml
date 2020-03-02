@@ -14,6 +14,7 @@ jobs:
   test-e2e-encap:
     name: E2e tests on a Kind cluster on Linux
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-go@v1
@@ -37,6 +38,7 @@ jobs:
   test-e2e-noencap:
     name: E2e tests on a Kind cluster on Linux (noEncap)
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v1
@@ -60,6 +62,7 @@ jobs:
   test-e2e-hybrid:
     name: E2e tests on a Kind cluster on Linux (hybrid)
     runs-on: [ubuntu-18.04]
+    if: "!contains(github.event.head_commit.message, '/skip-actions')"
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v1
