@@ -9,9 +9,9 @@ on:
     - master
     - release-*
     paths-ignore:
-    - 'docs/**'
-    - '**.md'
-    - 'ci/jenkins/jobs/**'
+    - 'docs/*'
+    - '*.md'
+    - 'ci/jenkins/jobs/*'
 jobs:
   build-antrea-image:
     name: Build Antrea image to be used for Kind e2e tests
