@@ -9,9 +9,9 @@ on:
     - master
     - release-*
     paths-ignore:
-    - 'docs/**'
-    - '**.md'
-    - 'ci/jenkins/jobs/**'
+      - 'docs/**'
+      - '**.md'
+      - 'ci/jenkins/jobs/**'
 jobs:
 
 
