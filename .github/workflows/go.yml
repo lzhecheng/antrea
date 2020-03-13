@@ -4,18 +4,10 @@ on:
     branches:
     - master
     - release-*
-    paths-ignore:
-    - "docs/**"
-    - "**.md"
-    - "ci/jenkins/jobs/**"
   push:
     branches:
     - master
     - release-*
-    paths-ignore:
-    - "docs/**"
-    - "**.md"
-    - "ci/jenkins/jobs/**"
 jobs:
 
 
