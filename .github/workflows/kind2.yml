@@ -1,0 +1,38 @@
+name: Kind
+on:
+  pull_request:
+    branches:
+    - master
+    - release-*
+    paths:
+    - "docs/**"
+    - "**.md"
+    - "ci/jenkins/jobs/**"
+  push:
+    branches:
+    - master
+    - release-*
+    paths:
+    - "docs/**"
+    - "**.md"
+    - "ci/jenkins/jobs/**"
+jobs:
+  build-antrea-image:
+    name: Build Antrea image to be used for Kind e2e tests
+    steps: exit 0
+
+  test-e2e-encap:
+    name: E2e tests on a Kind cluster on Linux
+    steps: exit 0
+
+  test-e2e-noencap:
+    name: E2e tests on a Kind cluster on Linux (noEncap)
+    steps: exit 0
+
+  test-e2e-hybrid:
+    name: E2e tests on a Kind cluster on Linux (hybrid)
+    steps: exit 0
+
+  test-netpol-tmp:
+    name: Run experimental network policy tests (netpol) on Kind cluster
+    steps: exit 0
