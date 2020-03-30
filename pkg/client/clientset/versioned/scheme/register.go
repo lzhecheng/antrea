@@ -22,6 +22,7 @@ import (
 	networkingv1beta1 "github.com/vmware-tanzu/antrea/pkg/apis/networking/v1beta1"
 	securityv1alpha1 "github.com/vmware-tanzu/antrea/pkg/apis/security/v1alpha1"
 	systemv1beta1 "github.com/vmware-tanzu/antrea/pkg/apis/system/v1beta1"
+	antreav1 "github.com/vmware-tanzu/antrea/pkg/apis/traceflow/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
@@ -38,6 +39,7 @@ var localSchemeBuilder = runtime.SchemeBuilder{
 	networkingv1beta1.AddToScheme,
 	securityv1alpha1.AddToScheme,
 	systemv1beta1.AddToScheme,
+	antreav1.AddToScheme,
 }
 
 // AddToScheme adds all types of this clientset into the given scheme. This allows composition

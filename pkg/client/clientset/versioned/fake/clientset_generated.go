@@ -28,6 +28,8 @@ import (
 	fakesecurityv1alpha1 "github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned/typed/security/v1alpha1/fake"
 	systemv1beta1 "github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned/typed/system/v1beta1"
 	fakesystemv1beta1 "github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned/typed/system/v1beta1/fake"
+	antreav1 "github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned/typed/traceflow/v1"
+	fakeantreav1 "github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned/typed/traceflow/v1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -105,4 +107,9 @@ func (c *Clientset) SecurityV1alpha1() securityv1alpha1.SecurityV1alpha1Interfac
 // SystemV1beta1 retrieves the SystemV1beta1Client
 func (c *Clientset) SystemV1beta1() systemv1beta1.SystemV1beta1Interface {
 	return &fakesystemv1beta1.FakeSystemV1beta1{Fake: &c.Fake}
+}
+
+// AntreaV1 retrieves the AntreaV1Client
+func (c *Clientset) AntreaV1() antreav1.AntreaV1Interface {
+	return &fakeantreav1.FakeAntreaV1{Fake: &c.Fake}
 }
