@@ -17,13 +17,16 @@ package ovsconfig
 type TunnelType string
 
 const (
-	GeneveTunnel = "geneve"
-	VXLANTunnel  = "vxlan"
-	GRETunnel    = "gre"
-	STTTunnel    = "stt"
+	GeneveTunnel  = "geneve"
+	VXLANTunnel   = "vxlan"
+	GRETunnel     = "gre"
+	GREIPv6Tunnel = "ip6gre"
+	STTTunnel     = "stt"
 
 	OVSDatapathSystem = "system"
 	OVSDatapathNetdev = "netdev"
+
+	GREIPv6PacketType = "legacy_l2"
 )
 
 type OVSBridgeClient interface {
@@ -36,8 +39,8 @@ type OVSBridgeClient interface {
 	SetInterfaceOptions(name string, options map[string]interface{}) Error
 	CreatePort(name, ifDev string, externalIDs map[string]interface{}) (string, Error)
 	CreateInternalPort(name string, ofPortRequest int32, externalIDs map[string]interface{}) (string, Error)
-	CreateTunnelPort(name string, tunnelType TunnelType, ofPortRequest int32) (string, Error)
-	CreateTunnelPortExt(name string, tunnelType TunnelType, ofPortRequest int32, csum bool, localIP string, remoteIP string, psk string, externalIDs map[string]interface{}) (string, Error)
+	CreateTunnelPort(name string, tunnelType TunnelType, ofPortRequest int32, isIPv6 bool) (string, Error)
+	CreateTunnelPortExt(name string, tunnelType TunnelType, ofPortRequest int32, csum bool, localIP string, remoteIP string, psk string, externalIDs map[string]interface{}, isIPv6 bool) (string, Error)
 	CreateUplinkPort(name string, ofPortRequest int32, externalIDs map[string]interface{}) (string, Error)
 	DeletePort(portUUID string) Error
 	DeletePorts(portUUIDList []string) Error

@@ -238,7 +238,7 @@ func TestTunnelOptionCsum(t *testing.T) {
 			defer data.teardown(t)
 
 			name := "vxlan0"
-			_, err := data.br.CreateTunnelPortExt(name, ovsconfig.VXLANTunnel, ofPortRequest, testCase.initialCsum, "", "", "", nil)
+			_, err := data.br.CreateTunnelPortExt(name, ovsconfig.VXLANTunnel, ofPortRequest, testCase.initialCsum, "", "", "", nil, false)
 			require.Nil(t, err, "Error when creating tunnel port")
 			options, err := data.br.GetInterfaceOptions(name)
 			require.Nil(t, err, "Error when getting interface options")
@@ -284,10 +284,10 @@ func testCreatePort(t *testing.T, br *ovsconfig.OVSBridge, name string, ifType s
 		uuid, err = br.CreateInternalPort(name, ofPortRequest, externalIDs)
 	case "vxlan":
 		externalIDs = map[string]interface{}{}
-		uuid, err = br.CreateTunnelPort(name, ovsconfig.VXLANTunnel, ofPortRequest)
+		uuid, err = br.CreateTunnelPort(name, ovsconfig.VXLANTunnel, ofPortRequest, false)
 	case "geneve":
 		externalIDs = map[string]interface{}{}
-		uuid, err = br.CreateTunnelPort(name, ovsconfig.GeneveTunnel, ofPortRequest)
+		uuid, err = br.CreateTunnelPort(name, ovsconfig.GeneveTunnel, ofPortRequest, false)
 	}
 
 	require.Nilf(t, err, "Failed to create %s port: %s", ifType, err)

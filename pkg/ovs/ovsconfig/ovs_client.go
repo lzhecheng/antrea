@@ -371,8 +371,8 @@ func (br *OVSBridge) CreateInternalPort(name string, ofPortRequest int32, extern
 // CreateTunnelPort creates a tunnel port with the specified name and type on
 // the bridge.
 // If ofPortRequest is not zero, it will be passed to the OVS port creation.
-func (br *OVSBridge) CreateTunnelPort(name string, tunnelType TunnelType, ofPortRequest int32) (string, Error) {
-	return br.createTunnelPort(name, tunnelType, ofPortRequest, false, "", "", "", nil)
+func (br *OVSBridge) CreateTunnelPort(name string, tunnelType TunnelType, ofPortRequest int32, isIPv6 bool) (string, Error) {
+	return br.createTunnelPort(name, tunnelType, ofPortRequest, false, "", "", "", nil, isIPv6)
 }
 
 // CreateTunnelPortExt creates a tunnel port with the specified name and type
@@ -393,11 +393,12 @@ func (br *OVSBridge) CreateTunnelPortExt(
 	localIP string,
 	remoteIP string,
 	psk string,
-	externalIDs map[string]interface{}) (string, Error) {
+	externalIDs map[string]interface{},
+	isIPv6 bool) (string, Error) {
 	if psk != "" && remoteIP == "" {
 		return "", newInvalidArgumentsError("IPSec tunnel can not be flow based. remoteIP must be set")
 	}
-	return br.createTunnelPort(name, tunnelType, ofPortRequest, csum, localIP, remoteIP, psk, externalIDs)
+	return br.createTunnelPort(name, tunnelType, ofPortRequest, csum, localIP, remoteIP, psk, externalIDs, isIPv6)
 }
 
 func (br *OVSBridge) createTunnelPort(
@@ -408,7 +409,8 @@ func (br *OVSBridge) createTunnelPort(
 	localIP string,
 	remoteIP string,
 	psk string,
-	externalIDs map[string]interface{}) (string, Error) {
+	externalIDs map[string]interface{},
+	isIPv6 bool) (string, Error) {
 
 	if tunnelType != VXLANTunnel && tunnelType != GeneveTunnel && tunnelType != GRETunnel && tunnelType != STTTunnel {
 		return "", newInvalidArgumentsError("unsupported tunnel type: " + string(tunnelType))
@@ -417,7 +419,7 @@ func (br *OVSBridge) createTunnelPort(
 		return "", newInvalidArgumentsError(fmt.Sprint("invalid ofPortRequest value: ", ofPortRequest))
 	}
 
-	options := make(map[string]interface{}, 3)
+	options := make(map[string]interface{}, 4)
 	if remoteIP != "" {
 		options["remote_ip"] = remoteIP
 	} else {
@@ -434,6 +436,10 @@ func (br *OVSBridge) createTunnelPort(
 	}
 	if csum {
 		options["csum"] = "true"
+	}
+	if tunnelType == GRETunnel && isIPv6 {
+		tunnelType = GREIPv6Tunnel
+		options["packet_type"] = GREIPv6PacketType
 	}
 
 	return br.createPort(name, name, string(tunnelType), ofPortRequest, externalIDs, options)

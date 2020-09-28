@@ -474,6 +474,7 @@ func (c *Controller) createIPSecTunnelPort(nodeName string, nodeIP net.IP) (int3
 	} else {
 		portName := util.GenerateNodeTunnelInterfaceName(nodeName)
 		ovsExternalIDs := map[string]interface{}{ovsExternalIDNodeName: nodeName}
+		isIPv6 := nodeIP.To4() == nil
 		portUUID, err := c.ovsBridgeClient.CreateTunnelPortExt(
 			portName,
 			c.networkConfig.TunnelType,
@@ -482,7 +483,8 @@ func (c *Controller) createIPSecTunnelPort(nodeName string, nodeIP net.IP) (int3
 			"",
 			nodeIP.String(),
 			c.networkConfig.IPSecPSK,
-			ovsExternalIDs)
+			ovsExternalIDs,
+			isIPv6)
 		if err != nil {
 			return 0, fmt.Errorf("failed to create IPSec tunnel port for Node %s", nodeName)
 		}

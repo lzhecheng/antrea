@@ -89,6 +89,12 @@ fi
 curl https://github.com/jianjuns/ovs/commit/714b133ef2b2d8dac0770b78265a8b52c2f00f2f.patch | \
     git apply
 
+# IPsec in IPv6 is not supported by OVS v2.14.0. Here is a fix.
+# After a new OVS release with the fix is available, we can switch to use that OVS release,
+# and remove the workaround to apply the patch here.
+curl https://github.com/lzhecheng/ovs/commit/673f2bc99d24e5fb3f12427a1d7b206758c25629.patch | \
+    git apply
+
 # OVS hardcodes the installation path to /usr/lib/python3.7/dist-packages/ but this location
 # does not seem to be in the Python path in Ubuntu 20.04. There may be a better way to do this,
 # but this seems like an acceptable workaround.
