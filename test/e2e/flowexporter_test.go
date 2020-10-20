@@ -175,7 +175,7 @@ func checkRecordsWithPodIPs(t *testing.T, data *TestData, podAIP string, podBIP 
 			}
 		}
 	}
-	assert.Equal(t, templateRecords, clusterInfo.numNodes, "Each agent should send out template record")
+	assert.Equal(t, clusterInfo.numNodes, templateRecords, "Each agent should send out template record")
 	// Single iperf resulting in two connections with separate ports. Suspecting second flow to be control flow to exchange
 	// stats info. As 5s is export interval and iperf traffic runs for 10s, we expect 4 records.
 	assert.GreaterOrEqual(t, dataRecordsIntraNode, 4, "Iperf flow should have expected number of flow records")

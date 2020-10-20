@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -183,7 +184,20 @@ func (o *Options) validateFlowExporterConfig() error {
 			return fmt.Errorf("IPFIX flow collector address should be provided")
 		} else {
 			// Check if it is TCP or UDP
-			strSlice := strings.Split(o.config.FlowCollectorAddr, ":")
+			match, err := regexp.MatchString("\\[.*\\]:.*", o.config.FlowCollectorAddr)
+			if err != nil {
+				return fmt.Errorf("Failed to parse FlowCollectorAddr: %s", o.config.FlowCollectorAddr)
+			}
+			var strSlice []string
+			if match {
+				// IPv6
+				idx := strings.Index(o.config.FlowCollectorAddr, "]")
+				strSlice = append(strSlice, o.config.FlowCollectorAddr[:idx+1])
+				strSlice = append(strSlice, strings.Split(o.config.FlowCollectorAddr[idx+2:], ":")...)
+			} else {
+				// IPv4
+				strSlice = strings.Split(o.config.FlowCollectorAddr, ":")
+			}
 			var proto string
 			if len(strSlice) == 2 {
 				// If no separator ":" and proto is given, then default to TCP.
@@ -199,7 +213,7 @@ func (o *Options) validateFlowExporterConfig() error {
 
 			// Convert the string input in net.Addr format
 			hostPortAddr := strSlice[0] + ":" + strSlice[1]
-			_, _, err := net.SplitHostPort(hostPortAddr)
+			_, _, err = net.SplitHostPort(hostPortAddr)
 			if err != nil {
 				return fmt.Errorf("IPFIX flow collector is given in invalid format: %v", err)
 			}
