@@ -108,7 +108,7 @@ metadata:
   namespace: kube-system
 spec:
   podManagementPolicy: Parallel
-  replicas: 1
+  replicas: 5
   selector:
     matchLabels:
       app: antrea
@@ -120,10 +120,20 @@ spec:
         app: antrea
         component: antrea-agent-simulator
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: antrea/instance
+                    operator: NotIn
+                    values:
+                      - simulator
       serviceAccountName: antrea-agent-simulator
       initContainers:
       - name: init-inotify-limit
         image: busybox:latest
+        imagePullPolicy: IfNotPresent
         command: ['sysctl', '-w', 'fs.inotify.max_user_instances=200']
         securityContext:
           privileged: true
@@ -136,7 +146,7 @@ spec:
           path: /var/log
       containers:
       - name: simulator
-        image: bliu9284/simulator-ubuntu:v0.11.0
+        image: harbor-repo.vmware.com/dockerhub-proxy-cache/bliu9284/simulator-ubuntu:v0.11.0
         imagePullPolicy: IfNotPresent
         command: ['/antrea-agent-simulator', '-v', '5']
         env:
@@ -159,7 +169,7 @@ spec:
         - name: logs-volume
           mountPath: /var/log
       - name: hollow-kubelet
-        image: bliu9284/kubemark:v1.18.4
+        image: harbor-repo.vmware.com/dockerhub-proxy-cache/bliu9284/kubemark:v1.18.4
         ports:
         - containerPort: 4194
         - containerPort: 10250
@@ -191,7 +201,7 @@ spec:
         securityContext:
           privileged: true
       - name: hollow-proxy
-        image: bliu9284/kubemark:v1.18.4
+        image: harbor-repo.vmware.com/dockerhub-proxy-cache/bliu9284/kubemark:v1.18.4
         env:
         - name: CONTENT_TYPE
           valueFrom:
