@@ -1,4 +1,4 @@
-FROM golang:1.13 as antrea-build
+FROM golang:1.15 as antrea-build
 
 WORKDIR /antrea
 
@@ -19,3 +19,4 @@ LABEL description="The Docker image to deploy the Antrea CNI. "
 USER root
 
 COPY --from=antrea-build /antrea/bin/* /usr/local/bin/
+
