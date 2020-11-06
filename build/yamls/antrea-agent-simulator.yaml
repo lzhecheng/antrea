@@ -28,24 +28,6 @@ metadata:
   name: antrea-agent-simulator
 rules:
 - apiGroups:
-  - ""
-  resources:
-  - nodes
-  verbs:
-  - get
-  - watch
-  - list
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - endpoints
-  - services
-  verbs:
-  - get
-  - watch
-  - list
-- apiGroups:
   - clusterinformation.antrea.tanzu.vmware.com
   resources:
   - antreaagentinfos
@@ -103,19 +85,6 @@ rules:
   - get
   - watch
   - list
-- apiGroups:
-  - ops.antrea.tanzu.vmware.com
-  resources:
-  - traceflows
-  - traceflows/status
-  verbs:
-  - get
-  - watch
-  - list
-  - update
-  - patch
-  - create
-  - delete
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -151,7 +120,7 @@ spec:
         app: antrea
         component: antrea-agent-simulator
     spec:
-      serviceAccountName: antrea-agent
+      serviceAccountName: antrea-agent-simulator
       initContainers:
       - name: init-inotify-limit
         image: busybox:latest
@@ -168,7 +137,6 @@ spec:
       containers:
       - name: simulator
         image: bliu9284/simulator-ubuntu:v0.11.0
-        #imagePullPolicy: Always
         imagePullPolicy: IfNotPresent
         command: ['/antrea-agent-simulator', '-v', '5']
         env:
