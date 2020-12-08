@@ -64,7 +64,7 @@ func run() error {
 	for _, tc := range []cases.TestCase{
 		cases.TestCasePodCreation(),
 		cases.TestCaseNetworkPolicyRealization(),
-		cases.TestCaseServiceChurns(option.ipv6),
+		cases.TestCaseServiceChurns(true),
 		cases.TestCaseTearDown(),
 	} {
 		klog.Infoln(splitter)

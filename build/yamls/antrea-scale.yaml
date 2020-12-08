@@ -157,7 +157,7 @@ spec:
                       - simulator
       containers:
         - name: antrea-scale
-          image: antrea/antrea-scale:latest
+          image: projects.registry.vmware.com/antrea/antrea-scale:latest
           imagePullPolicy: IfNotPresent
           command:
             - antrea-scale

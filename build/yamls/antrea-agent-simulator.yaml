@@ -233,3 +233,11 @@ spec:
       - effect: NoExecute
         key: node.kubernetes.io/not-ready
         operator: Exists
+---
+apiVersion: v1
+data:
+  content.type: test-cluster
+kind: ConfigMap
+metadata:
+  name: node-configmap
+  namespace: kube-system
