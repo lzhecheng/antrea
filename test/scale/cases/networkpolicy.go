@@ -207,17 +207,19 @@ func TestCaseNetworkPolicyRealization() TestCase {
 						gErr, _ := errgroup.WithContext(context.Background())
 						for _, toPod := range toPods {
 							gErr.Go(func() error {
-								exec, err := remotecommand.NewSPDYExecutor(data.Kubeconfig(), "POST", execURL(&fromPod, data.KubernetesClientSet(), toPod.Status.PodIP))
-								if err != nil {
-									return fmt.Errorf("error when creating SPDY executor: %w", err)
-								}
-								var stdout, stderr bytes.Buffer
-								if err := exec.Stream(remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr}); err == nil {
-									return fmt.Errorf("the connection should not be success")
-								} else if !strings.Contains(strings.ToLower(stderr.String()), "timed out") {
-									return fmt.Errorf("the connection not met timed out error, stdout: `%s`, stderr: `%s`, err: %s", stdout.String(), stderr.String(), err)
-								}
-								return nil
+								return utils.DefaultRetry(func() error {
+									exec, err := remotecommand.NewSPDYExecutor(data.Kubeconfig(), "POST", execURL(&fromPod, data.KubernetesClientSet(), toPod.Status.PodIP))
+									if err != nil {
+										return fmt.Errorf("error when creating SPDY executor: %w", err)
+									}
+									var stdout, stderr bytes.Buffer
+									if err := exec.Stream(remotecommand.StreamOptions{Stdout: &stdout, Stderr: &stderr}); err == nil {
+										return fmt.Errorf("the connection should not be success")
+									} else if !strings.Contains(strings.ToLower(stderr.String()), "timed out") {
+										return fmt.Errorf("the connection not met timed out error, stdout: `%s`, stderr: `%s`, err: %s", stdout.String(), stderr.String(), err)
+									}
+									return nil
+								})
 							})
 						}
 						if err := gErr.Wait(); err != nil {
