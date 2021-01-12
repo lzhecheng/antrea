@@ -51,6 +51,7 @@ import (
 	ofconfig "github.com/vmware-tanzu/antrea/pkg/ovs/openflow"
 	"github.com/vmware-tanzu/antrea/pkg/ovs/ovsconfig"
 	"github.com/vmware-tanzu/antrea/pkg/signals"
+	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
 	"github.com/vmware-tanzu/antrea/pkg/version"
 	k8sproxy "github.com/vmware-tanzu/antrea/third_party/proxy"
 )
@@ -71,9 +72,13 @@ func run(o *Options) error {
 	informerFactory := informers.NewSharedInformerFactory(k8sClient, informerDefaultResync)
 	crdInformerFactory := crdinformers.NewSharedInformerFactory(crdClient, informerDefaultResync)
 	traceflowInformer := crdInformerFactory.Ops().V1alpha1().Traceflows()
+	tlsConfig, err := cipher.NewTLSConfig(o.config.CipherSuites, o.config.TLSMinVersion, o.config.TLSMaxVersion)
+	if err != nil {
+		return fmt.Errorf("error generating TLS config: %v", err)
+	}
 
 	// Create Antrea Clientset for the given config.
-	antreaClientProvider := agent.NewAntreaClientProvider(o.config.AntreaClientConnection, k8sClient)
+	antreaClientProvider := agent.NewAntreaClientProvider(o.config.AntreaClientConnection, k8sClient, tlsConfig)
 
 	// Register Antrea Agent metrics if EnablePrometheusMetrics is set
 	if o.config.EnablePrometheusMetrics {

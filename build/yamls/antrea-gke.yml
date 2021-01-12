@@ -1371,6 +1371,16 @@ data:
     # Provide the address of Kubernetes apiserver, to override any value provided in kubeconfig or InClusterConfig.
     # Defaults to "". It must be a host string, a host:port pair, or a URL to the base of the apiserver.
     #kubeAPIServerOverride: ""
+
+    # Comma-separated list of cipher suites. If omitted, the default Go cipher suites will be used.
+    # https://golang.org/pkg/crypto/tls/#pkg-constants
+    #cipherSuites:
+
+    # TLS min version from: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13.
+    #tlsMinVersion:
+
+    # TLS max version from: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13.
+    #tlsMaxVersion:
   antrea-cni.conflist: |
     {
         "cniVersion":"0.3.0",
@@ -1427,7 +1437,7 @@ metadata:
   annotations: {}
   labels:
     app: antrea
-  name: antrea-config-8hc5c7g4hb
+  name: antrea-config-ddb2982fm2
   namespace: kube-system
 ---
 apiVersion: v1
@@ -1538,7 +1548,7 @@ spec:
         key: node-role.kubernetes.io/master
       volumes:
       - configMap:
-          name: antrea-config-8hc5c7g4hb
+          name: antrea-config-ddb2982fm2
         name: antrea-config
       - name: antrea-controller-tls
         secret:
@@ -1805,7 +1815,7 @@ spec:
           path: /home/kubernetes/bin
         name: host-cni-bin
       - configMap:
-          name: antrea-config-8hc5c7g4hb
+          name: antrea-config-ddb2982fm2
         name: antrea-config
       - hostPath:
           path: /etc/cni/net.d
