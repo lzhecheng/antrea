@@ -124,4 +124,6 @@ type AgentConfig struct {
 	// whenever a Pod's container defines a specific port to be exposed (each container can define a list of ports as pod.spec.containers[].ports),
 	// and all Node traffic directed to that port will be forwarded to the Pod.
 	NPLPortRange string `yaml:"nplPortRange,omitempty"`
+	// Cipher suites.
+	CipherSuites string `yaml:"cipherSuites,omitempty"`
 }

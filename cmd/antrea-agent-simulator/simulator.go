@@ -49,7 +49,7 @@ func run() error {
 	}
 
 	// Create Antrea Clientset for the given config.
-	antreaClientProvider := agent.NewAntreaClientProvider(componentbaseconfig.ClientConnectionConfiguration{}, k8sClient)
+	antreaClientProvider := agent.NewAntreaClientProvider(componentbaseconfig.ClientConnectionConfiguration{}, k8sClient, []uint16{})
 
 	if err = antreaClientProvider.RunOnce(); err != nil {
 		return err

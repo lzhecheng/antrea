@@ -39,4 +39,6 @@ type ControllerConfig struct {
 	// antrea-controller container.
 	// Defaults to true.
 	SelfSignedCert bool `yaml:"selfSignedCert,omitempty"`
+	// Cipher suites.
+	CipherSuites string `yaml:"cipherSuites,omitempty"`
 }

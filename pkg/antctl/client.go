@@ -32,6 +32,7 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/antctl/runtime"
 	"github.com/vmware-tanzu/antrea/pkg/apis"
 	controllerapiserver "github.com/vmware-tanzu/antrea/pkg/apiserver"
+	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
 )
 
 // requestOption describes options to issue requests.
@@ -50,6 +51,8 @@ type requestOption struct {
 	// connect to the server set in kubeconfig in controller mode.
 	// It set, it takes precedence over the above default endpoints.
 	server string
+	// cipherSuites are the cipher suites used between client and server.
+	cipherSuites []uint16
 }
 
 // client issues requests to endpoints.
@@ -71,6 +74,7 @@ func (c *client) resolveKubeconfig(opt *requestOption) (*rest.Config, error) {
 		kubeconfig.Insecure = true
 		kubeconfig.CAFile = ""
 		kubeconfig.CAData = nil
+		kubeconfig.Transport = cipher.HttpTransportFromCipherSuites(opt.cipherSuites)
 		if runtime.Mode == runtime.ModeAgent {
 			kubeconfig.Host = net.JoinHostPort("127.0.0.1", fmt.Sprint(apis.AntreaAgentAPIPort))
 			kubeconfig.BearerTokenFile = agentapiserver.TokenPath

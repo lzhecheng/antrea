@@ -92,8 +92,8 @@ func installAPIGroup(s *genericapiserver.GenericAPIServer, aq agentquerier.Agent
 
 // New creates an APIServer for running in antrea agent.
 func New(aq agentquerier.AgentQuerier, npq querier.AgentNetworkPolicyInfoQuerier, bindPort int,
-	enableMetrics bool, kubeconfig string) (*agentAPIServer, error) {
-	cfg, err := newConfig(bindPort, enableMetrics, kubeconfig)
+	enableMetrics bool, kubeconfig string, cipherSuites []string) (*agentAPIServer, error) {
+	cfg, err := newConfig(bindPort, enableMetrics, kubeconfig, cipherSuites)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func New(aq agentquerier.AgentQuerier, npq querier.AgentNetworkPolicyInfoQuerier
 	return &agentAPIServer{GenericAPIServer: s}, nil
 }
 
-func newConfig(bindPort int, enableMetrics bool, kubeconfig string) (*genericapiserver.CompletedConfig, error) {
+func newConfig(bindPort int, enableMetrics bool, kubeconfig string, cipherSuites []string) (*genericapiserver.CompletedConfig, error) {
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
 	authentication := genericoptions.NewDelegatingAuthenticationOptions()
 	authorization := genericoptions.NewDelegatingAuthorizationOptions().WithAlwaysAllowPaths("/healthz")
@@ -124,6 +124,7 @@ func newConfig(bindPort int, enableMetrics bool, kubeconfig string) (*genericapi
 	secureServing.ServerCert.PairName = Name
 	secureServing.BindAddress = net.ParseIP("0.0.0.0")
 	secureServing.BindPort = bindPort
+	secureServing.CipherSuites = cipherSuites
 
 	if err := secureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
 		return nil, fmt.Errorf("error creating self-signed certificates: %v", err)

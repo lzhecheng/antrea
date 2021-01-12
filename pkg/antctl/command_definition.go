@@ -36,6 +36,7 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/antctl/transform/common"
 	"github.com/vmware-tanzu/antrea/pkg/apis/controlplane/v1beta2"
 	"github.com/vmware-tanzu/antrea/pkg/controller/networkpolicy"
+	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
 )
 
 type formatterType string
@@ -787,12 +788,19 @@ func (cd *commandDefinition) newCommandRunE(c *client) func(*cobra.Command, []st
 		kubeconfigPath, _ := cmd.Flags().GetString("kubeconfig")
 		timeout, _ := cmd.Flags().GetDuration("timeout")
 		server, _ := cmd.Flags().GetString("server")
+		rawCipherSuites, _ := cmd.Flags().GetString("ciphersuites")
+		cipherSuites, err := cipher.CipherSuitesStrToIDs(rawCipherSuites)
+		if err != nil {
+			return fmt.Errorf("error translating cipher suite names to IDs: %v", err)
+		}
+
 		resp, err := c.request(&requestOption{
 			commandDefinition: cd,
 			kubeconfig:        kubeconfigPath,
 			args:              argMap,
 			timeout:           timeout,
 			server:            server,
+			cipherSuites:      cipherSuites,
 		})
 		if err != nil {
 			return err
