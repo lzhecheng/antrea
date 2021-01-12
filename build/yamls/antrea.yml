@@ -1376,6 +1376,16 @@ data:
     # Provide the address of Kubernetes apiserver, to override any value provided in kubeconfig or InClusterConfig.
     # Defaults to "". It must be a host string, a host:port pair, or a URL to the base of the apiserver.
     #kubeAPIServerOverride: ""
+
+    # Comma-separated list of cipher suites. If omitted, the default Go cipher suites will be used.
+    # https://golang.org/pkg/crypto/tls/#pkg-constants
+    # Note that Antrea is using old version of k8s.io/component-base, so TLS1.3 Cipher suites cannot be filled here but it
+    # doesn't stop apiserver from using TLS1.3 Cipher Suites.
+    # https://github.com/kubernetes/kubernetes/blob/release-1.18/staging/src/k8s.io/component-base/cli/flag/ciphersuites_flag.go#L28
+    #tlsCipherSuites:
+
+    # TLS min version from: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13.
+    #tlsMinVersion:
   antrea-cni.conflist: |
     {
         "cniVersion":"0.3.0",
@@ -1427,12 +1437,22 @@ data:
     # And the Secret must be mounted to directory "/var/run/antrea/antrea-controller-tls" of the
     # antrea-controller container.
     #selfSignedCert: true
+
+    # Comma-separated list of cipher suites. If omitted, the default Go cipher suites will be used.
+    # https://golang.org/pkg/crypto/tls/#pkg-constants
+    # Note that Antrea is using old version of k8s.io/component-base, so TLS1.3 Cipher suites cannot be filled here but it
+    # doesn't stop apiserver from using TLS1.3 Cipher Suites.
+    # https://github.com/kubernetes/kubernetes/blob/release-1.18/staging/src/k8s.io/component-base/cli/flag/ciphersuites_flag.go#L28
+    #tlsCipherSuites:
+
+    # TLS min version from: VersionTLS10, VersionTLS11, VersionTLS12, VersionTLS13.
+    #tlsMinVersion:
 kind: ConfigMap
 metadata:
   annotations: {}
   labels:
     app: antrea
-  name: antrea-config-2m4ktcghmf
+  name: antrea-config-btkh48bd5c
   namespace: kube-system
 ---
 apiVersion: v1
@@ -1543,7 +1563,7 @@ spec:
         key: node-role.kubernetes.io/master
       volumes:
       - configMap:
-          name: antrea-config-2m4ktcghmf
+          name: antrea-config-btkh48bd5c
         name: antrea-config
       - name: antrea-controller-tls
         secret:
@@ -1807,7 +1827,7 @@ spec:
         operator: Exists
       volumes:
       - configMap:
-          name: antrea-config-2m4ktcghmf
+          name: antrea-config-btkh48bd5c
         name: antrea-config
       - hostPath:
           path: /etc/cni/net.d
