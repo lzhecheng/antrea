@@ -1353,6 +1353,9 @@ data:
     # whenever a Pod's container defines a specific port to be exposed (each container can define a list of ports as pod.spec.containers[].ports),
     # and all Node traffic directed to that port will be forwarded to the Pod.
     #nplPortRange: 40000-41000
+
+    # Comma-separated list of cipher suites.
+    #cipherSuites:
   antrea-cni.conflist: |
     {
         "cniVersion":"0.3.0",
@@ -1404,12 +1407,15 @@ data:
     # And the Secret must be mounted to directory "/var/run/antrea/antrea-controller-tls" of the
     # antrea-controller container.
     #selfSignedCert: true
+
+    # Comma-separated list of cipher suites.
+    #cipherSuites:
 kind: ConfigMap
 metadata:
   annotations: {}
   labels:
     app: antrea
-  name: antrea-config-hhfkgg2fg5
+  name: antrea-config-d6h2m6bggb
   namespace: kube-system
 ---
 apiVersion: v1
@@ -1520,7 +1526,7 @@ spec:
         key: node-role.kubernetes.io/master
       volumes:
       - configMap:
-          name: antrea-config-hhfkgg2fg5
+          name: antrea-config-d6h2m6bggb
         name: antrea-config
       - name: antrea-controller-tls
         secret:
@@ -1788,7 +1794,7 @@ spec:
           path: /home/kubernetes/bin
         name: host-cni-bin
       - configMap:
-          name: antrea-config-hhfkgg2fg5
+          name: antrea-config-d6h2m6bggb
         name: antrea-config
       - hostPath:
           path: /etc/cni/net.d

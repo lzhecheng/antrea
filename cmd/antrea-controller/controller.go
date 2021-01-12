@@ -46,6 +46,7 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/log"
 	"github.com/vmware-tanzu/antrea/pkg/monitor"
 	"github.com/vmware-tanzu/antrea/pkg/signals"
+	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
 	"github.com/vmware-tanzu/antrea/pkg/version"
 )
 
@@ -145,6 +146,11 @@ func run(o *Options) error {
 		statsAggregator = stats.NewAggregator(networkPolicyInformer, cnpInformer, anpInformer)
 	}
 
+	cipherSuites := cipher.RawCipherSuitesStrToCipherSuitesList(o.config.CipherSuites)
+	if err != nil {
+		return fmt.Errorf("error translating cipher suite names to IDs: %v", err)
+	}
+
 	apiServerConfig, err := createAPIServerConfig(o.config.ClientConnection.Kubeconfig,
 		client,
 		aggregatorClient,
@@ -159,7 +165,8 @@ func run(o *Options) error {
 		networkPolicyController,
 		networkPolicyStatusController,
 		statsAggregator,
-		o.config.EnablePrometheusMetrics)
+		o.config.EnablePrometheusMetrics,
+		cipherSuites)
 	if err != nil {
 		return fmt.Errorf("error creating API server config: %v", err)
 	}
@@ -224,8 +231,10 @@ func createAPIServerConfig(kubeconfig string,
 	npController *networkpolicy.NetworkPolicyController,
 	networkPolicyStatusController *networkpolicy.StatusController,
 	statsAggregator *stats.Aggregator,
-	enableMetrics bool) (*apiserver.Config, error) {
+	enableMetrics bool,
+	cipherSuites []string) (*apiserver.Config, error) {
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
+	secureServing.CipherSuites = cipherSuites
 	authentication := genericoptions.NewDelegatingAuthenticationOptions()
 	authorization := genericoptions.NewDelegatingAuthorizationOptions().WithAlwaysAllowPaths(allowedPaths...)
 
