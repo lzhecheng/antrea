@@ -16,9 +16,12 @@ package cipher
 
 import (
 	"crypto/tls"
+	"fmt"
+	"k8s.io/client-go/rest"
 	"net/http"
 	"strings"
 
+	"k8s.io/client-go/transport"
 	"k8s.io/component-base/cli/flag"
 )
 
@@ -49,4 +52,19 @@ func HttpTransportFromCipherSuites(cs []uint16) *http.Transport {
 		CipherSuites: cs,
 	}
 	return &http.Transport{TLSClientConfig: tlsConfig}
+}
+
+func AddCipherSuitesToConfig(c *rest.Config, cs []uint16) (*rest.Config, error) {
+	var tlsConfig *tls.Config
+	var err error
+	if tlsConfig, err = rest.TLSConfigFor(c); err != nil {
+		return nil, fmt.Errorf("error when adding cipher suites to Config: %v", err)
+	}
+	tlsConfig.CipherSuites = cs
+	trans := http.Transport{TLSClientConfig: tlsConfig}
+	restConfig := rest.Config{
+		Host:      c.Host,
+		Transport: &trans,
+	}
+	return &restConfig, nil
 }

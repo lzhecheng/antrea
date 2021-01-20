@@ -161,12 +161,15 @@ func inClusterConfig(caBundle []byte, cipherSuites []uint16) (*rest.Config, erro
 		CAData:     caBundle,
 		ServerName: cert.GetAntreaServerNames()[0],
 	}
-
-	return &rest.Config{
+	rawConfig := rest.Config{
 		Host:            "https://" + net.JoinHostPort(host, port),
 		TLSClientConfig: tlsClientConfig,
 		BearerToken:     string(token),
 		BearerTokenFile: tokenFile,
-		Transport:       cipher.HttpTransportFromCipherSuites(cipherSuites),
-	}, nil
+	}
+	config, err := cipher.AddCipherSuitesToConfig(&rawConfig, cipherSuites)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
 }

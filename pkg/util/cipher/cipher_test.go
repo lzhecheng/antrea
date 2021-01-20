@@ -15,6 +15,7 @@
 package cipher
 
 import (
+	"k8s.io/client-go/rest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,6 +39,35 @@ func TestCipherSuitesStrToIDs(t *testing.T) {
 			assert.Equal(t, tc.ids, output)
 		} else {
 			assert.Error(t, err)
+		}
+	}
+}
+
+func TestAddCipherSuitesToConfig(t *testing.T) {
+	rawConfig := rest.Config{
+		Host: "http://1.1.1.1:80",
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData:     []byte("ca-data"),
+			ServerName: "serverName",
+		},
+		BearerToken:     "token",
+		BearerTokenFile: "token-file",
+	}
+	expected := rest.Config{}
+
+	tests := []struct {
+		rawConfig    *rest.Config
+		cipherSuites []uint16
+		expected     *rest.Config
+	}{
+		{&rawConfig, []uint16{0, 1}, &expected},
+	}
+	for _, tc := range tests {
+		o, err := AddCipherSuitesToConfig(tc.rawConfig, tc.cipherSuites)
+		if err != nil {
+			t.Errorf("error: %v", err)
+		} else {
+			assert.Equal(t, *tc.expected, *o)
 		}
 	}
 }
