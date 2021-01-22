@@ -15,9 +15,12 @@
 package agent
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"sync"
 
@@ -152,15 +155,29 @@ func inClusterConfig(caBundle []byte) (*rest.Config, error) {
 		return nil, err
 	}
 
-	tlsClientConfig := rest.TLSClientConfig{
-		CAData:     caBundle,
-		ServerName: cert.GetAntreaServerNames()[0],
-	}
-
-	return &rest.Config{
+	rc := rest.Config{
 		Host:            "https://" + net.JoinHostPort(host, port),
-		TLSClientConfig: tlsClientConfig,
 		BearerToken:     string(token),
 		BearerTokenFile: tokenFile,
-	}, nil
+	}
+	if err := addCipherSuitesToConfig(&rc, []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}, caBundle, cert.GetAntreaServerNames()[0]); err != nil {
+		return nil, err
+	}
+	return &rc, nil
+}
+
+func addCipherSuitesToConfig(c *rest.Config, cs []uint16, caBundle []byte, serverName string) error {
+	tlsConfig := new(tls.Config)
+
+	tlsConfig.RootCAs = x509.NewCertPool()
+	if ok := tlsConfig.RootCAs.AppendCertsFromPEM(caBundle); !ok {
+		return fmt.Errorf("error when append certificates from PEM")
+	}
+	tlsConfig.ServerName = serverName
+	tlsConfig.CipherSuites = cs
+	tlsConfig.PreferServerCipherSuites = false
+
+	trans := http.Transport{TLSClientConfig: tlsConfig}
+	c.Transport = &trans
+	return nil
 }

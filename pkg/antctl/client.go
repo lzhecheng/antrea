@@ -17,9 +17,11 @@ package antctl
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -71,6 +73,13 @@ func (c *client) resolveKubeconfig(opt *requestOption) (*rest.Config, error) {
 		kubeconfig.Insecure = true
 		kubeconfig.CAFile = ""
 		kubeconfig.CAData = nil
+
+		cs := []uint16{tls.TLS_CHACHA20_POLY1305_SHA256}
+		tlsConfig := &tls.Config{
+			CipherSuites: cs,
+		}
+		kubeconfig.Transport = &http.Transport{TLSClientConfig: tlsConfig}
+
 		if runtime.Mode == runtime.ModeAgent {
 			kubeconfig.Host = net.JoinHostPort("127.0.0.1", fmt.Sprint(apis.AntreaAgentAPIPort))
 			kubeconfig.BearerTokenFile = agentapiserver.TokenPath
