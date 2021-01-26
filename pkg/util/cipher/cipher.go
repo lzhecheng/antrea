@@ -63,6 +63,7 @@ func AddCipherSuitesToConfig(c *rest.Config, cs []uint16, caBundle []byte, serve
 	}
 	tlsConfig.ServerName = serverName
 	tlsConfig.CipherSuites = cs
+	tlsConfig.MaxVersion = tls.VersionTLS12
 
 	trans := http.Transport{TLSClientConfig: tlsConfig}
 	c.Transport = &trans

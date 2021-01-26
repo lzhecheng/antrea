@@ -234,7 +234,7 @@ func createAPIServerConfig(kubeconfig string,
 	enableMetrics bool,
 	cipherSuites []string) (*apiserver.Config, error) {
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
-	secureServing.CipherSuites = cipherSuites
+	//secureServing.CipherSuites = cipherSuites
 	authentication := genericoptions.NewDelegatingAuthenticationOptions()
 	authorization := genericoptions.NewDelegatingAuthorizationOptions().WithAlwaysAllowPaths(allowedPaths...)
 

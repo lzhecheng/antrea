@@ -108,6 +108,9 @@ func getMetricsFromApiServer(t *testing.T, url string, token string) string {
 	// #nosec G402: ignore insecure options in test code
 	config := &tls.Config{
 		InsecureSkipVerify: true,
+		CipherSuites: []uint16{0x002f},
+		MinVersion: tls.VersionTLS12,
+		PreferServerCipherSuites: false,
 	}
 	tr := &http.Transport{TLSClientConfig: config}
 	client := &http.Client{Transport: tr}
@@ -118,7 +121,7 @@ func getMetricsFromApiServer(t *testing.T, url string, token string) string {
 	}
 
 	if token != "" {
-		req.Header.Add("Authorization", "Bearer "+token)
+		req.Header.Add("Apkg/util/cipher/cipher.gouthorization", "Bearer "+token)
 	}
 
 	// Query metrics via HTTPS from Pod
@@ -126,6 +129,7 @@ func getMetricsFromApiServer(t *testing.T, url string, token string) string {
 	if err != nil {
 		t.Fatalf("Error fetching metrics from %s: %v", url, err)
 	}
+	fmt.Println("req cs: ", resp.TLS.CipherSuite)
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
@@ -162,6 +166,8 @@ func testPrometheusMetricsOnPods(t *testing.T, data *TestData, component string,
 			for _, port := range container.Ports {
 				hostPort = port.HostPort
 				t.Logf("Found %s %d", hostIP, hostPort)
+				fmt.Println(fmt.Sprintf("https://%s:%d/metrics", hostIP, hostPort))
+				fmt.Println("token: ", token)
 				respBody := getMetricsFromApiServer(t, fmt.Sprintf("https://%s:%d/metrics", hostIP, hostPort), token)
 
 				parsed, err := parser.TextToMetricFamilies(strings.NewReader(respBody))

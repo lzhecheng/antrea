@@ -107,6 +107,8 @@ func (p *antreaClientProvider) updateAntreaClient() error {
 	var err error
 	if len(p.config.Kubeconfig) == 0 {
 		klog.Info("No antrea kubeconfig file was specified. Falling back to in-cluster config")
+		klog.Infof("lzc Server name: %s", cert.GetAntreaServerNames()[0])
+
 		caBundle := p.caContentProvider.CurrentCABundleContent()
 		if caBundle == nil {
 			klog.Info("Didn't get CA certificate, skip updating Antrea Client")
