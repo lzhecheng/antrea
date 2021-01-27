@@ -195,6 +195,10 @@ function deliver_antrea_windows {
         make windows-bin
     fi
 
+    # Append antrea-prometheus.yml to antrea.yml
+    echo "---" >> build/yamls/antrea.yml
+    cat build/yamls/antrea-prometheus.yml >> build/yamls/antrea.yml
+
     echo "====== Delivering Antrea to all the Nodes ======"
     export KUBECONFIG=$KUBECONFIG_PATH
     export_govc_env_var
@@ -332,7 +336,7 @@ function run_e2e {
 
     set +e
     mkdir -p `pwd`/antrea-test-logs
-    go test -v github.com/vmware-tanzu/antrea/test/e2e --logs-export-dir `pwd`/antrea-test-logs -timeout=50m
+    go test -v github.com/vmware-tanzu/antrea/test/e2e --logs-export-dir `pwd`/antrea-test-logs -timeout=50m --prometheus
     if [[ "$?" != "0" ]]; then
         TEST_FAILURE=true
     fi

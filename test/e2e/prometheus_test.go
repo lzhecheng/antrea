@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -75,6 +76,7 @@ type prometheusServerOutput struct {
 	}
 }
 
+// TODO: if this can be moved to main_test.go
 func init() {
 	flag.BoolVar(&prometheusEnabled, "prometheus", false, "Enables Prometheus tests")
 }
@@ -156,6 +158,7 @@ func testPrometheusMetricsOnPods(t *testing.T, data *TestData, component string,
 
 	var hostIP = ""
 	var hostPort int32 = 0
+	var ipAndPort = ""
 	var parser expfmt.TextParser
 
 	// Find Pods' API endpoints, check for metrics existence on each of them
@@ -166,8 +169,14 @@ func testPrometheusMetricsOnPods(t *testing.T, data *TestData, component string,
 		for _, container := range pod.Spec.Containers {
 			for _, port := range container.Ports {
 				hostPort = port.HostPort
-				t.Logf("Found %s %d", hostIP, hostPort)
-				respBody := getMetricsFromApiServer(t, fmt.Sprintf("https://%s:%d/metrics", hostIP, hostPort), token)
+				if net.ParseIP(hostIP).To4() != nil {
+					ipAndPort = fmt.Sprintf("%s:%d", hostIP, hostPort)
+				} else {
+					ipAndPort = fmt.Sprintf("[%s]:%d", hostIP, hostPort)
+				}
+				t.Logf("Found %s", ipAndPort)
+				respBody := getMetricsFromApiServer(t, fmt.Sprintf("https://%s/metrics", ipAndPort), token)
+				fmt.Println(respBody)
 
 				parsed, err := parser.TextToMetricFamilies(strings.NewReader(respBody))
 				if err != nil {
@@ -184,13 +193,13 @@ func testPrometheusMetricsOnPods(t *testing.T, data *TestData, component string,
 				for _, metric := range metrics {
 					if !testMap[metric] {
 						metricsFound = false
-						t.Errorf("Metric %s not found on %s:%d", metric, hostIP, hostPort)
+						t.Errorf("Metric %s not found on %s", metric, ipAndPort)
 					}
 				}
 			}
 		}
 		if !metricsFound {
-			t.Fatalf("Some metrics do not exist in pods on %s:%d", hostIP, hostPort)
+			t.Fatalf("Some metrics do not exist in pods on %s", ipAndPort)
 		}
 	}
 }
@@ -264,7 +273,13 @@ func testMetricsFromPrometheusServer(t *testing.T, data *TestData, prometheusJob
 	// Target metadata API(/api/v1/targets/metadata) has been available since Prometheus v2.4.0.
 	// This API is still experimental in Prometheus v2.19.3.
 	path := url.PathEscape("match_target={job=\"" + prometheusJob + "\"}")
-	queryUrl := fmt.Sprintf("http://%s:%d/api/v1/targets/metadata?%s", hostIP, nodePort, path)
+	var ipAndPort string
+	if net.ParseIP(hostIP).To4() != nil {
+		ipAndPort = fmt.Sprintf("%s:%d", hostIP, nodePort)
+	} else {
+		ipAndPort = fmt.Sprintf("[%s]:%d", hostIP, nodePort)
+	}
+	queryUrl := fmt.Sprintf("http://%s/api/v1/targets/metadata?%s", ipAndPort, path)
 
 	client := &http.Client{}
 	resp, err := client.Get(queryUrl)
@@ -304,7 +319,7 @@ func testMetricsFromPrometheusServer(t *testing.T, data *TestData, prometheusJob
 	}
 }
 
-func TestControllerMetricsOnPrometheusServer(t *testing.T) {
+func TestPrometheusServerControllerMetrics(t *testing.T) {
 	skipIfPrometheusDisabled(t)
 
 	data, err := setupTest(t)
@@ -316,7 +331,7 @@ func TestControllerMetricsOnPrometheusServer(t *testing.T) {
 	testMetricsFromPrometheusServer(t, data, "antrea-controllers", antreaControllerMetrics)
 }
 
-func TestAgentMetricsOnPrometheusServer(t *testing.T) {
+func TestPrometheusServerAgentMetrics(t *testing.T) {
 	skipIfPrometheusDisabled(t)
 
 	data, err := setupTest(t)
