@@ -72,13 +72,9 @@ func run(o *Options) error {
 	informerFactory := informers.NewSharedInformerFactory(k8sClient, informerDefaultResync)
 	crdInformerFactory := crdinformers.NewSharedInformerFactory(crdClient, informerDefaultResync)
 	traceflowInformer := crdInformerFactory.Ops().V1alpha1().Traceflows()
-	tlsConfig, err := cipher.NewTLSConfig(o.config.CipherSuites, o.config.TLSMinVersion, o.config.TLSMaxVersion)
-	if err != nil {
-		return fmt.Errorf("error generating TLS config: %v", err)
-	}
 
 	// Create Antrea Clientset for the given config.
-	antreaClientProvider := agent.NewAntreaClientProvider(o.config.AntreaClientConnection, k8sClient, tlsConfig)
+	antreaClientProvider := agent.NewAntreaClientProvider(o.config.AntreaClientConnection, k8sClient)
 
 	// Register Antrea Agent metrics if EnablePrometheusMetrics is set
 	if o.config.EnablePrometheusMetrics {
@@ -295,12 +291,18 @@ func run(o *Options) error {
 		go proxier.Run(stopCh)
 	}
 
+	cipherSuites, err := cipher.GenerateCipherSuitesList(o.config.CipherSuites)
+	if err != nil {
+		return fmt.Errorf("error generating Cipher Suite list: %v", err)
+	}
 	apiServer, err := apiserver.New(
 		agentQuerier,
 		networkPolicyController,
 		o.config.APIPort,
 		o.config.EnablePrometheusMetrics,
-		o.config.ClientConnection.Kubeconfig)
+		o.config.ClientConnection.Kubeconfig,
+		cipherSuites,
+		cipher.TLSVersionMap[o.config.TLSMinVersion])
 	if err != nil {
 		return fmt.Errorf("error when creating agent API server: %v", err)
 	}

@@ -32,7 +32,6 @@ import (
 
 	cert "github.com/vmware-tanzu/antrea/pkg/apiserver/certificate"
 	"github.com/vmware-tanzu/antrea/pkg/client/clientset/versioned"
-	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
 )
 
 // AntreaClientProvider provides a method to get Antrea client.
@@ -55,7 +54,7 @@ type antreaClientProvider struct {
 
 var _ dynamiccertificates.Listener = &antreaClientProvider{}
 
-func NewAntreaClientProvider(config config.ClientConnectionConfiguration, kubeClient kubernetes.Interface, tlsConfig *tls.Config) *antreaClientProvider {
+func NewAntreaClientProvider(config config.ClientConnectionConfiguration, kubeClient kubernetes.Interface) *antreaClientProvider {
 	// The key "ca.crt" may not exist at the beginning, no need to fail as the CA provider will watch the ConfigMap
 	// and notify antreaClientProvider of any update. The consumers of antreaClientProvider are supposed to always
 	// call GetAntreaClient() to get a client and not cache it.
@@ -68,7 +67,6 @@ func NewAntreaClientProvider(config config.ClientConnectionConfiguration, kubeCl
 	antreaClientProvider := &antreaClientProvider{
 		config:            config,
 		caContentProvider: antreaCAProvider,
-		tlsConfig:         tlsConfig,
 	}
 
 	antreaCAProvider.AddListener(antreaClientProvider)
@@ -114,7 +112,7 @@ func (p *antreaClientProvider) updateAntreaClient() error {
 			klog.Info("Didn't get CA certificate, skip updating Antrea Client")
 			return nil
 		}
-		kubeConfig, err = inClusterConfig(caBundle, p.tlsConfig)
+		kubeConfig, err = inClusterConfig(caBundle)
 		if err != nil {
 			return err
 		}
@@ -151,7 +149,7 @@ func (p *antreaClientProvider) updateAntreaClient() error {
 // kubernetes gives to pods. It's intended for clients that expect to be
 // running inside a pod running on kubernetes. It will return error
 // if called from a process not running in a kubernetes environment.
-func inClusterConfig(caBundle []byte, tlsConfig *tls.Config) (*rest.Config, error) {
+func inClusterConfig(caBundle []byte) (*rest.Config, error) {
 	// #nosec G101: false positive triggered by variable name which includes "token"
 	const tokenFile = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	host, port := os.Getenv("ANTREA_SERVICE_HOST"), os.Getenv("ANTREA_SERVICE_PORT")
@@ -164,13 +162,15 @@ func inClusterConfig(caBundle []byte, tlsConfig *tls.Config) (*rest.Config, erro
 		return nil, err
 	}
 
-	config := rest.Config{
+	tlsClientConfig := rest.TLSClientConfig{
+		CAData:     caBundle,
+		ServerName: cert.GetAntreaServerNames()[0],
+	}
+
+	return &rest.Config{
 		Host:            "https://" + net.JoinHostPort(host, port),
+		TLSClientConfig: tlsClientConfig,
 		BearerToken:     string(token),
 		BearerTokenFile: tokenFile,
-	}
-	if err := cipher.AppendTLSConfig(&config, tlsConfig, caBundle, cert.GetAntreaServerNames()[0]); err != nil {
-		return nil, err
-	}
-	return &config, nil
+	}, nil
 }

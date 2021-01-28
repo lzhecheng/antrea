@@ -32,7 +32,6 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/agent"
 	"github.com/vmware-tanzu/antrea/pkg/k8s"
 	"github.com/vmware-tanzu/antrea/pkg/signals"
-	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
 	"github.com/vmware-tanzu/antrea/pkg/util/env"
 	"github.com/vmware-tanzu/antrea/pkg/version"
 )
@@ -50,8 +49,7 @@ func run() error {
 	}
 
 	// Create Antrea Clientset for the given config.
-	tlsConfig, _ := cipher.NewTLSConfig("", "", "")
-	antreaClientProvider := agent.NewAntreaClientProvider(componentbaseconfig.ClientConnectionConfiguration{}, k8sClient, tlsConfig)
+	antreaClientProvider := agent.NewAntreaClientProvider(componentbaseconfig.ClientConnectionConfiguration{}, k8sClient)
 
 	if err = antreaClientProvider.RunOnce(); err != nil {
 		return err
