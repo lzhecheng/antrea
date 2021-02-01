@@ -15,26 +15,34 @@
 package e2e
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
-	"net/http"
+	"net"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/vmware-tanzu/antrea/pkg/apis"
 )
 
-// #nosec G101: false positive triggered by variable name which includes "token"
-const tokenFile = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-const cipherSuite = tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 // a TLS1.2 Cipher Suite
+type apiserver int
 
-var cipherSuites = []uint16{cipherSuite}
-var tls13CipherSuites map[uint16]bool
+const (
+	controller apiserver = apis.AntreaControllerAPIPort
+	agent      apiserver = apis.AntreaAgentAPIPort
 
-// TestTLSCipherSuitesClient tests Cipher Suite and TLSVersion config on Antrea Apiserver.
-func TestTLSCipherSuitesAntrea(t *testing.T) {
+	cipherSuite    = tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 // a TLS1.2 Cipher Suite
+	cipherSuiteStr = "ECDHE-RSA-AES128-GCM-SHA256"
+)
+
+var (
+	cipherSuites             = []uint16{cipherSuite}
+	opensslTLS13CipherSuites = []string{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"}
+)
+
+// TestTLSCipherSuites tests Cipher Suite and TLSVersion config on Antrea Apiserver, Controller side or Agent side.
+func TestTLSCipherSuites(t *testing.T) {
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -42,27 +50,26 @@ func TestTLSCipherSuitesAntrea(t *testing.T) {
 	defer teardownTest(t, data)
 
 	data.configureTLS(t, cipherSuites, "VersionTLS12")
-	tls13CipherSuites = make(map[uint16]bool)
-	for _, cs := range tls.CipherSuites() {
-		if len(cs.SupportedVersions) == 1 && cs.SupportedVersions[0] == tls.VersionTLS13 {
-			tls13CipherSuites[cs.ID] = true
-		}
-	}
 
-	svc, err := data.clientset.CoreV1().Services(antreaNamespace).Get(context.TODO(), "antrea", metav1.GetOptions{})
-	assert.NoError(t, err, "failed to get Antrea Service")
-	if len(svc.Spec.Ports) == 0 {
-		t.Fatal("Antrea Service has no ports")
-	}
-	url := fmt.Sprintf("https://%s:%d", svc.Spec.ClusterIP, svc.Spec.Ports[0].Port)
+	controllerPod, err := data.getAntreaController()
+	assert.NoError(t, err, "failed to get Antrea Controller Pod")
+	controllerPodName := controllerPod.Name
+	controlPlaneNode := controlPlaneNodeName()
+	agentPodName, err := data.getAntreaPodOnNode(controlPlaneNode)
+	assert.NoError(t, err, "failed to get Antrea Agent Pod Name on Control Plane Node")
 
-	// 1. TLSMaxVersion unset, then a TLS1.3 Cipher Suite should be used.
-	respCipherSuite := request(t, url, 0)
-	assert.Equal(t, true, tls13CipherSuites[respCipherSuite],
-		"Cipher Suite used by Server should be a TLS1.3 one, actual: %s", respCipherSuite)
-	// 2. Set TLSMaxVersion to TLS1.2, then TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 should be used
-	respCipherSuite = request(t, url, tls.VersionTLS12)
-	assert.Equal(t, cipherSuite, respCipherSuite, "Cipher Suite used by Server should be the TLS1.2 one we set")
+	tests := []struct {
+		podName       string
+		containerName string
+		apiserver     apiserver
+		apiserverStr  string
+	}{
+		{controllerPodName, controllerContainerName, controller, "Controller"},
+		{agentPodName, agentContainerName, agent, "Agent"},
+	}
+	for _, tc := range tests {
+		data.checkTLS(t, tc.podName, tc.containerName, tc.apiserver, tc.apiserverStr)
+	}
 }
 
 func (data *TestData) configureTLS(t *testing.T, cipherSuites []uint16, tlsMinVersion string) {
@@ -78,11 +85,11 @@ func (data *TestData) configureTLS(t *testing.T, cipherSuites []uint16, tlsMinVe
 
 	if err := data.mutateAntreaConfigMap(func(data map[string]string) {
 		antreaControllerConf, _ := data["antrea-controller.conf"]
-		antreaControllerConf = strings.Replace(antreaControllerConf, "#cipherSuites:", fmt.Sprintf("cipherSuites: %s", cipherSuitesStr), 1)
+		antreaControllerConf = strings.Replace(antreaControllerConf, "#tlsCipherSuites:", fmt.Sprintf("tlsCipherSuites: %s", cipherSuitesStr), 1)
 		antreaControllerConf = strings.Replace(antreaControllerConf, "#tlsMinVersion:", fmt.Sprintf("tlsMinVersion: %s", tlsMinVersion), 1)
 		data["antrea-controller.conf"] = antreaControllerConf
 		antreaAgentConf, _ := data["antrea-agent.conf"]
-		antreaAgentConf = strings.Replace(antreaAgentConf, "#cipherSuites:", fmt.Sprintf("cipherSuites: %s", cipherSuitesStr), 1)
+		antreaAgentConf = strings.Replace(antreaAgentConf, "#tlsCipherSuites:", fmt.Sprintf("tlsCipherSuites: %s", cipherSuitesStr), 1)
 		antreaAgentConf = strings.Replace(antreaAgentConf, "#tlsMinVersion:", fmt.Sprintf("tlsMinVersion: %s", tlsMinVersion), 1)
 		data["antrea-agent.conf"] = antreaAgentConf
 	}, true, true); err != nil {
@@ -90,65 +97,58 @@ func (data *TestData) configureTLS(t *testing.T, cipherSuites []uint16, tlsMinVe
 	}
 }
 
-func request(t *testing.T, url string, tlsMaxVersion uint16) uint16 {
-	// #nosec G402: ignore insecure options in test code
-	config := &tls.Config{
-		InsecureSkipVerify: true,
-	}
-	if tlsMaxVersion > 0 {
-		config.MaxVersion = tlsMaxVersion
-	}
-	tr := &http.Transport{TLSClientConfig: config}
-	client := &http.Client{Transport: tr}
-
-	req, err := http.NewRequest("GET", url, nil)
-	assert.NoError(t, err, "failed to create HTTP request")
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", tokenFile))
-	resp, err := client.Do(req)
-	assert.NoError(t, err, "failed to connect to %s", url)
-	respCipherSuite := resp.TLS.CipherSuite
-	defer resp.Body.Close()
-
-	return respCipherSuite
-}
-
-// TestTLSCipherSuitesAgent tests Cipher Suite and TLSVersion config on Antrea Agent Apiserver.
-func TestTLSCipherSuitesAgent(t *testing.T) {
-	data, err := setupTest(t)
-	if err != nil {
-		t.Fatalf("Error when setting up test: %v", err)
-	}
-	defer teardownTest(t, data)
-
-	data.configureTLS(t, cipherSuites, "VersionTLS12")
-
-	controlPlaneNode := controlPlaneNodeName()
-	podName, err := data.getAntreaPodOnNode(controlPlaneNode)
-	assert.NoError(t, err, "error when getting Antrea Agent Pod on Master Node")
-	curlTLS13CipherSuites := []string{"TLS_AES_128_GCM_SHA256", "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256"}
-
+func (data *TestData) checkTLS(t *testing.T, podName string, containerName string, apiserver apiserver, apiserverStr string) {
 	// 1. TLSMaxVersion unset, then a TLS1.3 Cipher Suite should be used.
-	stdout := data.openssl(podName, false)
-	oneTLS13CS := false
-	for _, cs := range curlTLS13CipherSuites {
-		if strings.Contains(stdout, fmt.Sprintf("New, TLSv1.3, Cipher is %s", cs)) {
-			oneTLS13CS = true
-			break
+	stdouts := data.openssl(t, podName, containerName, false, int(apiserver))
+	for _, stdout := range stdouts {
+		oneTLS13CS := false
+		for _, cs := range opensslTLS13CipherSuites {
+			if strings.Contains(stdout, fmt.Sprintf("New, TLSv1.3, Cipher is %s", cs)) {
+				oneTLS13CS = true
+				break
+			}
 		}
+		assert.Equal(t, true, oneTLS13CS,
+			"Cipher Suite used by %s Apiserver should be a TLS1.3 one, output: %s", apiserverStr, stdout)
 	}
-	assert.Equal(t, true, oneTLS13CS, "Cipher Suite used by Server should be a TLS1.3 one, output: %s", stdout)
 
 	// 2. Set TLSMaxVersion to TLS1.2, then TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 should be used
-	stdout = data.openssl(podName, true)
-	assert.Equal(t, true, strings.Contains(stdout, "New, TLSv1.2, Cipher is ECDHE-RSA-AES128-GCM-SHA256"),
-		"Cipher Suite used by Server should be the TLS1.2 one we set")
+	stdouts = data.openssl(t, podName, containerName, true, int(apiserver))
+	for _, stdout := range stdouts {
+		assert.Equal(t, true, strings.Contains(stdout, fmt.Sprintf("New, TLSv1.2, Cipher is %s", cipherSuiteStr)),
+			"Cipher Suite used by %s Server should be the TLS1.2 one '%s', output: %s", apiserverStr, cipherSuiteStr, stdout)
+	}
 }
 
-func (data *TestData) openssl(podName string, tls12 bool) string {
-	cmd := []string{"timeout", "1", "openssl", "s_client", "-connect", "127.0.0.1:10350"}
-	if tls12 {
-		cmd = append(cmd, "-tls1_2")
+func (data *TestData) openssl(t *testing.T, pod string, container string, tls12 bool, port int) []string {
+	var stdouts []string
+	tests := []struct {
+		enabled bool
+		ip      string
+		option  string
+	}{
+		{
+			clusterInfo.podV4NetworkCIDR != "",
+			"127.0.0.1",
+			"-4",
+		},
+		{
+			clusterInfo.podV6NetworkCIDR != "",
+			"::",
+			"-6",
+		},
 	}
-	stdout, _, _ := data.runCommandFromPod(antreaNamespace, podName, agentContainerName, cmd)
-	return stdout
+	for _, tc := range tests {
+		if !tc.enabled {
+			continue
+		}
+		cmd := []string{"timeout", "1", "openssl", "s_client", "-connect", net.JoinHostPort(tc.ip, fmt.Sprint(port)), tc.option}
+		if tls12 {
+			cmd = append(cmd, "-tls1_2")
+		}
+		stdout, _, _ := data.runCommandFromPod(antreaNamespace, pod, container, cmd)
+		t.Logf("Ran '%s' on Pod %s", strings.Join(cmd, " "), pod)
+		stdouts = append(stdouts, stdout)
+	}
+	return stdouts
 }

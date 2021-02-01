@@ -35,7 +35,6 @@ func TestGenerateCipherSuitesList(t *testing.T) {
 		success bool
 	}{
 
-
 		{fmt.Sprintf("%s,%s", cs0Str, cs1Str), []uint16{cs0, cs1}, true},
 		{fmt.Sprintf(" %s,   %s ", cs0Str, cs1Str), []uint16{cs0, cs1}, true},
 		{fmt.Sprintf("%s,%s", cs0Str, cs2StrNotExist), []uint16{}, false},

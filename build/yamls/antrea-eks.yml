@@ -1374,8 +1374,8 @@ data:
 
     # Comma-separated list of cipher suites. If omitted, the default Go cipher suites will be used.
     # https://golang.org/pkg/crypto/tls/#pkg-constants
-    # Note that Antrea is using old version of k8s.io/component-base, so TLS1.3 Cipher suites cannot be filled here but it
-    # doesn't stop apiserver from using TLS1.3 Cipher Suites.
+    # Note that Antrea is using old version of k8s.io/component-base, so TLS1.3 Cipher suites cannot be explicitly listed here but
+    # the apiserver can still use TLS1.3 Cipher Suites in practice and as preferred.
     # https://github.com/kubernetes/kubernetes/blob/release-1.18/staging/src/k8s.io/component-base/cli/flag/ciphersuites_flag.go#L28
     #tlsCipherSuites:
 
@@ -1435,8 +1435,8 @@ data:
 
     # Comma-separated list of cipher suites. If omitted, the default Go cipher suites will be used.
     # https://golang.org/pkg/crypto/tls/#pkg-constants
-    # Note that Antrea is using old version of k8s.io/component-base, so TLS1.3 Cipher suites cannot be filled here but it
-    # doesn't stop apiserver from using TLS1.3 Cipher Suites.
+    # Note that Antrea is using old version of k8s.io/component-base, so TLS1.3 Cipher suites cannot be explicitly listed here but
+    # the apiserver can still use TLS1.3 Cipher Suites in practice and as preferred.
     # https://github.com/kubernetes/kubernetes/blob/release-1.18/staging/src/k8s.io/component-base/cli/flag/ciphersuites_flag.go#L28
     #tlsCipherSuites:
 
@@ -1447,7 +1447,7 @@ metadata:
   annotations: {}
   labels:
     app: antrea
-  name: antrea-config-f7gd69b5t2
+  name: antrea-config-bg486kf2k4
   namespace: kube-system
 ---
 apiVersion: v1
@@ -1558,7 +1558,7 @@ spec:
         key: node-role.kubernetes.io/master
       volumes:
       - configMap:
-          name: antrea-config-f7gd69b5t2
+          name: antrea-config-bg486kf2k4
         name: antrea-config
       - name: antrea-controller-tls
         secret:
@@ -1824,7 +1824,7 @@ spec:
         operator: Exists
       volumes:
       - configMap:
-          name: antrea-config-f7gd69b5t2
+          name: antrea-config-bg486kf2k4
         name: antrea-config
       - hostPath:
           path: /etc/cni/net.d
