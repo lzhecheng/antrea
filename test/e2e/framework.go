@@ -273,7 +273,7 @@ func collectClusterInfo() error {
 
 	retrieveCIDRs := func(cmd string, reg string) ([]string, error) {
 		res := make([]string, 2)
-		rc, stdout, _, err := RunCommandOnNode(clusterInfo.controlPlaneNodeName, cmd)
+		rc, stdout, _, err := RunCommandOnNode(controlPlaneNodeName(), cmd)
 		if err != nil || rc != 0 {
 			return res, fmt.Errorf("error when running the following command `%s` on control-plane Node: %v, %s", cmd, err, stdout)
 		}
