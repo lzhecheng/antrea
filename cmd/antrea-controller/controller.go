@@ -47,6 +47,8 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/monitor"
 	"github.com/vmware-tanzu/antrea/pkg/signals"
 	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
+	"github.com/vmware-tanzu/antrea/pkg/util/env"
+	"github.com/vmware-tanzu/antrea/pkg/util/ip"
 	"github.com/vmware-tanzu/antrea/pkg/version"
 )
 
@@ -155,6 +157,12 @@ func run(o *Options) error {
 		return fmt.Errorf("error generating Cipher Suite list: %v", err)
 	}
 
+	ipFamily := ip.V4Family
+	hostIP := env.GetAntreaControllerHostIP()
+	if hostIP != "" && net.ParseIP(hostIP).To4() == nil {
+		ipFamily = ip.V6Family
+	}
+
 	apiServerConfig, err := createAPIServerConfig(o.config.ClientConnection.Kubeconfig,
 		client,
 		aggregatorClient,
@@ -171,7 +179,8 @@ func run(o *Options) error {
 		statsAggregator,
 		o.config.EnablePrometheusMetrics,
 		cipherSuites,
-		cipher.TLSVersionMap[o.config.TLSMinVersion])
+		cipher.TLSVersionMap[o.config.TLSMinVersion],
+		ipFamily)
 	if err != nil {
 		return fmt.Errorf("error creating API server config: %v", err)
 	}
@@ -238,7 +247,8 @@ func createAPIServerConfig(kubeconfig string,
 	statsAggregator *stats.Aggregator,
 	enableMetrics bool,
 	cipherSuites []uint16,
-	tlsMinVersion uint16) (*apiserver.Config, error) {
+	tlsMinVersion uint16,
+	ipFamily ip.IPFamily) (*apiserver.Config, error) {
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
 	authentication := genericoptions.NewDelegatingAuthenticationOptions()
 	authorization := genericoptions.NewDelegatingAuthorizationOptions().WithAlwaysAllowPaths(allowedPaths...)
@@ -249,7 +259,7 @@ func createAPIServerConfig(kubeconfig string,
 	}
 
 	secureServing.BindPort = bindPort
-	secureServing.BindAddress = net.ParseIP("0.0.0.0")
+	secureServing.BindAddress = net.ParseIP("::")
 	// kubeconfig file is useful when antrea-controller isn't not running as a pod, like during development.
 	if len(kubeconfig) > 0 {
 		authentication.RemoteKubeConfigFile = kubeconfig

@@ -242,13 +242,17 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.serviceAccountName
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
           ports:
             - containerPort: 10349
               name: api
               protocol: TCP
           readinessProbe:
             httpGet:
-              host: 127.0.0.1
+              host: localhost
               path: /readyz
               port: api
               scheme: HTTPS
@@ -258,7 +262,7 @@ spec:
             failureThreshold: 5
           livenessProbe:
             httpGet:
-              host: 127.0.0.1
+              host: localhost
               path: /livez
               port: api
               scheme: HTTPS

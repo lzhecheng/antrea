@@ -44,6 +44,7 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/apiserver/registry/system/supportbundle"
 	"github.com/vmware-tanzu/antrea/pkg/ovs/ovsctl"
 	"github.com/vmware-tanzu/antrea/pkg/querier"
+	"github.com/vmware-tanzu/antrea/pkg/util/ip"
 	antreaversion "github.com/vmware-tanzu/antrea/pkg/version"
 )
 
@@ -92,8 +93,8 @@ func installAPIGroup(s *genericapiserver.GenericAPIServer, aq agentquerier.Agent
 
 // New creates an APIServer for running in antrea agent.
 func New(aq agentquerier.AgentQuerier, npq querier.AgentNetworkPolicyInfoQuerier, bindPort int,
-	enableMetrics bool, kubeconfig string, cipherSuites []uint16, tlsMinVersion uint16) (*agentAPIServer, error) {
-	cfg, err := newConfig(bindPort, enableMetrics, kubeconfig)
+	enableMetrics bool, kubeconfig string, cipherSuites []uint16, tlsMinVersion uint16, ipFamily ip.IPFamily) (*agentAPIServer, error) {
+	cfg, err := newConfig(bindPort, enableMetrics, kubeconfig, ipFamily)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +111,7 @@ func New(aq agentquerier.AgentQuerier, npq querier.AgentNetworkPolicyInfoQuerier
 	return &agentAPIServer{GenericAPIServer: s}, nil
 }
 
-func newConfig(bindPort int, enableMetrics bool, kubeconfig string) (*genericapiserver.CompletedConfig, error) {
+func newConfig(bindPort int, enableMetrics bool, kubeconfig string, ipFamily ip.IPFamily) (*genericapiserver.CompletedConfig, error) {
 	secureServing := genericoptions.NewSecureServingOptions().WithLoopback()
 	authentication := genericoptions.NewDelegatingAuthenticationOptions()
 	authorization := genericoptions.NewDelegatingAuthorizationOptions().WithAlwaysAllowPaths("/healthz", "/livez", "/readyz")
@@ -124,10 +125,10 @@ func newConfig(bindPort int, enableMetrics bool, kubeconfig string) (*genericapi
 	// Set the PairName but leave certificate directory blank to generate in-memory by default.
 	secureServing.ServerCert.CertDirectory = ""
 	secureServing.ServerCert.PairName = Name
-	secureServing.BindAddress = net.ParseIP("0.0.0.0")
+	secureServing.BindAddress = net.ParseIP("::")
 	secureServing.BindPort = bindPort
 
-	if err := secureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
+	if err := secureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{ip.IPv4loopback, net.IPv6loopback}); err != nil {
 		return nil, fmt.Errorf("error creating self-signed certificates: %v", err)
 	}
 	serverConfig := genericapiserver.NewConfig(codecs)

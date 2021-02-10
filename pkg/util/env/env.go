@@ -27,6 +27,7 @@ const (
 	podNameEnvKey      = "POD_NAME"
 	podNamespaceEnvKey = "POD_NAMESPACE"
 	svcAcctNameEnvKey  = "SERVICEACCOUNT_NAME"
+	hostIPEnvKey       = "HOST_IP"
 
 	antreaCloudEKSEnvKey = "ANTREA_CLOUD_EKS"
 )
@@ -75,6 +76,15 @@ func GetAntreaControllerServiceAccount() string {
 		svcAcctName = "antrea-controller"
 	}
 	return svcAcctName
+}
+
+// GetAntreaControllerHostIP returns host IP of antrea-controller.
+func GetAntreaControllerHostIP() string {
+	hostIP := os.Getenv(hostIPEnvKey)
+	if hostIP == "" {
+		klog.Warningf("Environment variable %s not found", hostIPEnvKey)
+	}
+	return hostIP
 }
 
 func getBoolEnvVar(name string, defaultValue bool) bool {

@@ -22,6 +22,20 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/apis/controlplane/v1beta2"
 )
 
+type IPFamily uint
+
+const (
+	V4Family IPFamily = iota
+	V6Family
+)
+
+var IPv4loopback = net.ParseIP("127.0.0.1")
+
+var UnspecifiedAddrMap = map[IPFamily]net.IP{
+	V4Family: net.IPv4zero,
+	V6Family: net.IPv6unspecified,
+}
+
 const (
 	v4BitLen = 8 * net.IPv4len
 	v6BitLen = 8 * net.IPv6len

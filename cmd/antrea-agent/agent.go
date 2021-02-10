@@ -52,6 +52,7 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/ovs/ovsconfig"
 	"github.com/vmware-tanzu/antrea/pkg/signals"
 	"github.com/vmware-tanzu/antrea/pkg/util/cipher"
+	"github.com/vmware-tanzu/antrea/pkg/util/ip"
 	"github.com/vmware-tanzu/antrea/pkg/version"
 	k8sproxy "github.com/vmware-tanzu/antrea/third_party/proxy"
 )
@@ -309,6 +310,12 @@ func run(o *Options) error {
 	if err != nil {
 		return fmt.Errorf("error generating Cipher Suite list: %v", err)
 	}
+	// TODO: Now one Node in Kubernetes has one IP. If dual Node addresses (IPv4 and IPv6) are supported in the future,
+	// code below should be updated.
+	ipFamily := ip.V4Family
+	if nodeConfig.NodeIPAddr.IP.To4() == nil {
+		ipFamily = ip.V6Family
+	}
 	apiServer, err := apiserver.New(
 		agentQuerier,
 		networkPolicyController,
@@ -316,7 +323,8 @@ func run(o *Options) error {
 		o.config.EnablePrometheusMetrics,
 		o.config.ClientConnection.Kubeconfig,
 		cipherSuites,
-		cipher.TLSVersionMap[o.config.TLSMinVersion])
+		cipher.TLSVersionMap[o.config.TLSMinVersion],
+		ipFamily)
 	if err != nil {
 		return fmt.Errorf("error when creating agent API server: %v", err)
 	}
