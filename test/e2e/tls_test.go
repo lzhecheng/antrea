@@ -79,16 +79,15 @@ func (data *TestData) configureTLS(t *testing.T, cipherSuites []uint16, tlsMinVe
 		}
 	}
 
-	if err := data.mutateAntreaConfigMap(func(data map[string]string) {
-		antreaControllerConf, _ := data["antrea-controller.conf"]
-		antreaControllerConf = strings.Replace(antreaControllerConf, "#tlsCipherSuites:", fmt.Sprintf("tlsCipherSuites: %s", cipherSuitesStr), 1)
-		antreaControllerConf = strings.Replace(antreaControllerConf, "#tlsMinVersion:", fmt.Sprintf("tlsMinVersion: %s", tlsMinVersion), 1)
-		data["antrea-controller.conf"] = antreaControllerConf
-		antreaAgentConf, _ := data["antrea-agent.conf"]
-		antreaAgentConf = strings.Replace(antreaAgentConf, "#tlsCipherSuites:", fmt.Sprintf("tlsCipherSuites: %s", cipherSuitesStr), 1)
-		antreaAgentConf = strings.Replace(antreaAgentConf, "#tlsMinVersion:", fmt.Sprintf("tlsMinVersion: %s", tlsMinVersion), 1)
-		data["antrea-agent.conf"] = antreaAgentConf
-	}, true, true); err != nil {
+	cp := []configPair{
+		{"tlsCipherSuites", cipherSuitesStr},
+		{"tlsMinVersion", tlsMinVersion},
+	}
+	ap := []configPair{
+		{"tlsCipherSuites", cipherSuitesStr},
+		{"tlsMinVersion", tlsMinVersion},
+	}
+	if err := data.mutateAntreaConfigMap(cp, ap, true, true); err != nil {
 		t.Fatalf("Failed to configure Cipher Suites and TLSMinVersion: %v", err)
 	}
 }
