@@ -41,7 +41,7 @@ NETWORKPOLICY_SKIP="should allow egress access to server in CIDR block|should en
 CONTROL_PLANE_NODE_ROLE="master"
 
 _usage="Usage: $0 [--kubeconfig <KubeconfigSavePath>] [--workdir <HomePath>]
-                  [--testcase <windows-install-ovs|windows-conformance|windows-networkpolicy|e2e|conformance|networkpolicy>]
+                  [--testcase <windows-install-ovs|windows-conformance|windows-networkpolicy|windows-e2e|e2e|conformance|networkpolicy>]
 
 Run K8s e2e community tests (Conformance & Network Policy) or Antrea e2e tests on a remote (Jenkins) Windows or Linux cluster.
 
@@ -240,11 +240,11 @@ function deliver_antrea_windows {
             scp -o StrictHostKeyChecking=no -T hack/windows/Helper.psm1 Administrator@${IP}:/cygdrive/c/k/antrea/
             scp -o StrictHostKeyChecking=no -T build/yamls/windows/base/conf/antrea-cni.conflist Administrator@${IP}:/cygdrive/c/etc/cni/net.d/10-antrea.conflist
             scp -o StrictHostKeyChecking=no -T build/yamls/windows/base/conf/antrea-agent.conf Administrator@${IP}:/cygdrive/c/k/antrea/etc
-        elif [ "$TESTCASE" == "windows-conformance" ]; then
+        else
             if ! (test -f antrea-windows.tar.gz); then
                 # Compress antrea repo and copy it to a Windows node
                 mkdir -p jenkins
-                tar --exclude='./jenkins' -czvf jenkins/antrea_repo.tar.gz -C "$(pwd)" .
+                tar --exclude='./jenkins' -czf jenkins/antrea_repo.tar.gz -C "$(pwd)" .
                 for i in `seq 2`; do
                     timeout 2m scp -o StrictHostKeyChecking=no -T jenkins/antrea_repo.tar.gz Administrator@${IP}: && break
                 done
@@ -468,7 +468,11 @@ if [[ ${TESTCASE} == "windows-install-ovs" ]]; then
     run_install_windows_ovs
 elif [[ ${TESTCASE} =~ "windows" ]]; then
     deliver_antrea_windows
-    run_conformance_windows
+    if [[ ${TESTCASE} =~ "e2e" ]]; then
+        run_e2e
+    else
+        run_conformance_windows
+    fi
     clean_antrea
 elif [[ ${TESTCASE} =~ "e2e" ]]; then
     deliver_antrea

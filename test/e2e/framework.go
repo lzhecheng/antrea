@@ -31,6 +31,7 @@ import (
 	"github.com/containernetworking/plugins/pkg/ip"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v2"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -64,6 +65,7 @@ const (
 	antreaConfigVolume         string = "antrea-config"
 	flowAggregatorConfigVolume string = "flow-aggregator-config"
 	antreaDaemonSet            string = "antrea-agent"
+	antreaWindowsDaemonSet     string = "antrea-agent-windows"
 	antreaDeployment           string = "antrea-controller"
 	flowAggregatorDeployment   string = "flow-aggregator"
 	antreaDefaultGW            string = "antrea-gw0"
@@ -96,6 +98,7 @@ const (
 
 	agnhostImage        = "gcr.io/kubernetes-e2e-test-images/agnhost:2.8"
 	busyboxImage        = "projects.registry.vmware.com/library/busybox"
+	busyboxWindowsImage = "projects.registry.vmware.com/antrea/e2eteam-busybox:1.29-windows-amd64-1809"
 	nginxImage          = "projects.registry.vmware.com/antrea/nginx"
 	perftoolImage       = "projects.registry.vmware.com/antrea/perftool"
 	ipfixCollectorImage = "projects.registry.vmware.com/antrea/ipfix-collector:v0.4.3"
@@ -115,7 +118,6 @@ type ClusterNode struct {
 }
 
 type ClusterInfo struct {
-	numWorkerNodes       int
 	numNodes             int
 	podV4NetworkCIDR     string
 	podV6NetworkCIDR     string
@@ -124,6 +126,7 @@ type ClusterInfo struct {
 	controlPlaneNodeName string
 	nodes                map[int]ClusterNode
 	k8sServerVersion     string
+	windowsNodes         []int
 }
 
 var clusterInfo ClusterInfo
@@ -214,6 +217,15 @@ func workerNodeIP(idx int) string {
 	} else {
 		return node.ip
 	}
+}
+
+func isWindowsNode(idx int) bool {
+	for _, i := range clusterInfo.windowsNodes {
+		if i == idx {
+			return true
+		}
+	}
+	return false
 }
 
 // nodeGatewayIPs returns the Antrea gateway's IPv4 address and IPv6 address for the provided Node
@@ -363,12 +375,14 @@ func collectClusterInfo() error {
 			gwV4Addr:         gwV4Addr,
 			gwV6Addr:         gwV6Addr,
 		}
+		if node.Status.NodeInfo.OperatingSystem == "windows" {
+			clusterInfo.windowsNodes = append(clusterInfo.windowsNodes, nodeIdx)
+		}
 	}
 	if clusterInfo.controlPlaneNodeName == "" {
 		return fmt.Errorf("error when listing cluster Nodes: control-plane Node not found")
 	}
 	clusterInfo.numNodes = workerIdx
-	clusterInfo.numWorkerNodes = clusterInfo.numNodes - 1
 
 	retrieveCIDRs := func(cmd string, reg string) ([]string, error) {
 		res := make([]string, 2)
@@ -645,9 +659,20 @@ func (data *TestData) getAgentContainersRestartCount() (int, error) {
 // available, i.e. all the Nodes have one or more of the Antrea daemon Pod running and available.
 func (data *TestData) waitForAntreaDaemonSetPods(timeout time.Duration) error {
 	err := wait.Poll(defaultInterval, timeout, func() (bool, error) {
-		daemonSet, err := data.clientset.AppsV1().DaemonSets(antreaNamespace).Get(context.TODO(), antreaDaemonSet, metav1.GetOptions{})
-		if err != nil {
-			return false, fmt.Errorf("error when getting Antrea daemonset: %v", err)
+		getDS := func(dsName string, os string) (*appsv1.DaemonSet, error) {
+			ds, err := data.clientset.AppsV1().DaemonSets(antreaNamespace).Get(context.TODO(), dsName, metav1.GetOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("error when getting Antrea %s daemonset: %v", os, err)
+			}
+			return ds, nil
+		}
+		var dsLinux, dsWindows *appsv1.DaemonSet
+		var err error
+		if dsLinux, err = getDS(antreaDaemonSet, "Linux"); err != nil {
+			return false, err
+		}
+		if dsWindows, err = getDS(antreaWindowsDaemonSet, "Windows"); err != nil {
+			return false, err
 		}
 
 		// Make sure that all Daemon Pods are available.
@@ -656,8 +681,8 @@ func (data *TestData) waitForAntreaDaemonSetPods(timeout time.Duration) error {
 		// first time we get the DaemonSet's Status, we would return immediately instead of
 		// waiting.
 		desiredNumber := int32(clusterInfo.numNodes)
-		if daemonSet.Status.NumberAvailable != desiredNumber ||
-			daemonSet.Status.UpdatedNumberScheduled != desiredNumber {
+		if dsLinux.Status.NumberAvailable+dsWindows.Status.NumberAvailable != desiredNumber ||
+			dsLinux.Status.UpdatedNumberScheduled+dsWindows.Status.UpdatedNumberScheduled != desiredNumber {
 			return false, nil
 		}
 
@@ -796,26 +821,37 @@ func (data *TestData) deleteAntrea(timeout time.Duration) error {
 		GracePeriodSeconds: &gracePeriodSeconds,
 		PropagationPolicy:  &propagationPolicy,
 	}
-	if err := data.clientset.AppsV1().DaemonSets(antreaNamespace).Delete(context.TODO(), antreaDaemonSet, deleteOptions); err != nil {
-		if errors.IsNotFound(err) {
-			// no Antrea DaemonSet running, we return right away
-			return nil
-		}
-		return fmt.Errorf("error when trying to delete Antrea DaemonSet: %v", err)
-	}
-	err := wait.Poll(defaultInterval, timeout, func() (bool, error) {
-		if _, err := data.clientset.AppsV1().DaemonSets(antreaNamespace).Get(context.TODO(), antreaDaemonSet, metav1.GetOptions{}); err != nil {
-			if errors.IsNotFound(err) {
-				// Antrea DaemonSet does not exist any more, success
-				return true, nil
-			}
-			return false, fmt.Errorf("error when trying to get Antrea DaemonSet after deletion: %v", err)
-		}
 
-		// Keep trying
-		return false, nil
-	})
-	return err
+	deleteDS := func(ds string) error {
+		if err := data.clientset.AppsV1().DaemonSets(antreaNamespace).Delete(context.TODO(), ds, deleteOptions); err != nil {
+			if errors.IsNotFound(err) {
+				// no Antrea DaemonSet running, we return right away
+				return nil
+			}
+			return fmt.Errorf("error when trying to delete Antrea DaemonSet: %v", err)
+		}
+		err := wait.Poll(defaultInterval, timeout, func() (bool, error) {
+			if _, err := data.clientset.AppsV1().DaemonSets(antreaNamespace).Get(context.TODO(), ds, metav1.GetOptions{}); err != nil {
+				if errors.IsNotFound(err) {
+					// Antrea DaemonSet does not exist any more, success
+					return true, nil
+				}
+				return false, fmt.Errorf("error when trying to get Antrea DaemonSet after deletion: %v", err)
+			}
+
+			// Keep trying
+			return false, nil
+		})
+		return err
+	}
+	if err := deleteDS(antreaDaemonSet); err != nil {
+		return err
+	}
+	if err := deleteDS(antreaWindowsDaemonSet); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // getImageName gets the image name from the fully qualified URI.
@@ -823,7 +859,11 @@ func (data *TestData) deleteAntrea(timeout time.Duration) error {
 func getImageName(uri string) string {
 	registryAndImage := strings.Split(uri, ":")[0]
 	paths := strings.Split(registryAndImage, "/")
-	return paths[len(paths)-1]
+	name := paths[len(paths)-1]
+	if name == "e2eteam-busybox" {
+		name = "busybox"
+	}
+	return name
 }
 
 // createPodOnNode creates a pod in the test namespace with a container whose type is decided by imageName.
@@ -889,6 +929,16 @@ func (data *TestData) createPodOnNodeInNamespace(name, ns string, nodeName, ctrN
 func (data *TestData) createBusyboxPodOnNode(name string, nodeName string) error {
 	sleepDuration := 3600 // seconds
 	return data.createPodOnNode(name, nodeName, busyboxImage, []string{"sleep", strconv.Itoa(sleepDuration)}, nil, nil, nil, false, nil)
+}
+
+// createBusyboxPodOnNodeByIdx creates a Pod with Node Index. Windows use.
+func (data *TestData) createBusyboxPodOnNodeByIdx(name string, nodeIdx int) error {
+	sleepDuration := 3600 // seconds
+	image := busyboxImage
+	if isWindowsNode(nodeIdx) {
+		image = busyboxWindowsImage
+	}
+	return data.createPodOnNode(name, workerNodeName(nodeIdx), image, []string{"sleep", strconv.Itoa(sleepDuration)}, nil, nil, nil, false, nil)
 }
 
 // createHostNetworkBusyboxPodOnNode creates a host network Pod in the test namespace with a single busybox container.
@@ -1492,18 +1542,27 @@ func parseArpingStdout(out string) (sent uint32, received uint32, loss float32, 
 	return sent, received, loss, nil
 }
 
-func (data *TestData) runPingCommandFromTestPod(podName string, targetPodIPs *PodIPs, count int) error {
-	var cmd []string
+func (data *TestData) runPingCommandFromTestPod(podName string, targetPodIPs *PodIPs, count int, size int, isWindows bool) error {
+	countOption, sizeOption := "-c", "-s"
+	if isWindows {
+		// Options used in Windows e2eteam-busybox are different from Linux busybox.
+		countOption = "-n"
+		sizeOption = "-l"
+	}
+	cmd := []string{"ping", countOption, strconv.Itoa(count)}
+	if size != 0 {
+		cmd = append(cmd, sizeOption, strconv.Itoa(size))
+	}
 	if targetPodIPs.ipv4 != nil {
-		cmd = []string{"ping", "-c", strconv.Itoa(count), targetPodIPs.ipv4.String()}
-		if _, _, err := data.runCommandFromPod(testNamespace, podName, busyboxContainerName, cmd); err != nil {
-			return err
+		cmd = append(cmd, targetPodIPs.ipv4.String())
+		if stdout, stderr, err := data.runCommandFromPod(testNamespace, podName, busyboxContainerName, cmd); err != nil {
+			return fmt.Errorf("error when running ping command: %v - stdout: %s - stderr: %s", err, stdout, stderr)
 		}
 	}
 	if targetPodIPs.ipv6 != nil {
-		cmd = []string{"ping", "-6", "-c", strconv.Itoa(count), targetPodIPs.ipv6.String()}
-		if _, _, err := data.runCommandFromPod(testNamespace, podName, busyboxContainerName, cmd); err != nil {
-			return err
+		cmd = append(cmd, "-6", targetPodIPs.ipv6.String())
+		if stdout, stderr, err := data.runCommandFromPod(testNamespace, podName, busyboxContainerName, cmd); err != nil {
+			return fmt.Errorf("error when running ping command: %v - stdout: %s - stderr: %s", err, stdout, stderr)
 		}
 	}
 	return nil

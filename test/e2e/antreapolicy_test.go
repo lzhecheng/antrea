@@ -2280,6 +2280,8 @@ func printResults() {
 }
 
 func TestAntreaPolicy(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -2375,6 +2377,8 @@ func TestAntreaPolicy(t *testing.T) {
 }
 
 func TestAntreaPolicyStatus(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -2438,6 +2442,8 @@ func TestAntreaPolicyStatus(t *testing.T) {
 // TestANPNetworkPolicyStatsWithDropAction tests antreanetworkpolicystats can correctly collect dropped packets stats from ANP if
 // networkpolicystats feature is enabled
 func TestANPNetworkPolicyStatsWithDropAction(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -2589,6 +2595,8 @@ func TestANPNetworkPolicyStatsWithDropAction(t *testing.T) {
 }
 
 func TestAntreaClusterNetworkPolicyStats(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)

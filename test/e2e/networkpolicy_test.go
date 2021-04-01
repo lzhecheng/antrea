@@ -35,6 +35,8 @@ import (
 
 func TestNetworkPolicyStats(t *testing.T) {
 	skipIfNotIPv4Cluster(t)
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -162,6 +164,8 @@ func TestNetworkPolicyStats(t *testing.T) {
 }
 
 func TestDifferentNamedPorts(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -304,6 +308,8 @@ func (data *TestData) setupDifferentNamedPorts(t *testing.T) (checkFn func(), cl
 // 1. The traffic initiated from the host network namespace cannot be dropped.
 // 2. The traffic initiated externally that access the Pod via NodePort service can be dropped (skipped if provider is kind).
 func TestDefaultDenyIngressPolicy(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -375,6 +381,8 @@ func TestDefaultDenyIngressPolicy(t *testing.T) {
 }
 
 func TestDefaultDenyEgressPolicy(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -436,6 +444,8 @@ func TestDefaultDenyEgressPolicy(t *testing.T) {
 // https://github.com/kubernetes/kubernetes/pull/93583
 func TestEgressToServerInCIDRBlock(t *testing.T) {
 	skipIfNotIPv6Cluster(t)
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -510,6 +520,8 @@ func TestEgressToServerInCIDRBlock(t *testing.T) {
 // https://github.com/kubernetes/kubernetes/pull/93583
 func TestEgressToServerInCIDRBlockWithException(t *testing.T) {
 	skipIfNotIPv6Cluster(t)
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -576,6 +588,8 @@ func TestEgressToServerInCIDRBlockWithException(t *testing.T) {
 }
 
 func TestNetworkPolicyResyncAfterRestart(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
@@ -695,6 +709,8 @@ func TestNetworkPolicyResyncAfterRestart(t *testing.T) {
 }
 
 func TestIngressPolicyWithoutPortNumber(t *testing.T) {
+	skipIfHasWindowsNodes(t)
+
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
