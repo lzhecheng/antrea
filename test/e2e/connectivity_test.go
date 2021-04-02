@@ -69,17 +69,17 @@ func (data *TestData) testPodConnectivitySameNode(t *testing.T) {
 		podNames[idx] = randName(fmt.Sprintf("test-pod-%d-", idx))
 	}
 
-	idx := 1
+	nodeName := workerNodeName(1)
 	// If there're any Windows Nodes, set workerNode to one of them.
 	if len(clusterInfo.windowsNodes) != 0 {
-		idx = clusterInfo.windowsNodes[0]
+		nodeName = clusterInfo.windowsNodes[0]
 	}
 
-	t.Logf("Creating %d busybox test Pods on '%s'", numPods, workerNodeName(idx))
+	t.Logf("Creating %d busybox test Pods on '%s'", numPods, nodeName)
 	var isWindows []bool
 	for _, podName := range podNames {
-		isWindows = append(isWindows, isWindowsNode(idx))
-		if err := data.createBusyboxPodOnNodeByIdx(podName, idx); err != nil {
+		isWindows = append(isWindows, isWindowsNode(nodeName))
+		if err := data.createBusyboxPodOnNode(podName, nodeName); err != nil {
 			t.Fatalf("Error when creating busybox test Pod '%s': %v", podName, err)
 		}
 		defer deletePodWrapper(t, data, podName)
@@ -159,15 +159,15 @@ func createPodsOnDifferentNodes(t *testing.T, data *TestData, numPods int) (podN
 	var idx int
 	// If there're any Windows Nodes, at least one is involved.
 	if len(clusterInfo.windowsNodes) != 0 {
-		idx = clusterInfo.windowsNodes[0]
+		idx = clusterInfo.windowsNodeIdxes[0]
 	}
 	for remain := numPods; remain > 0; remain-- {
 		podName := randName(fmt.Sprintf("test-pod-%d-", idx))
-		isWindows = append(isWindows, isWindowsNode(idx))
-		tmpIdx := idx % clusterInfo.numNodes
+		nodeName := nodeName(idx % clusterInfo.numNodes)
 		idx++
-		t.Logf("Creating busybox test Pods '%s' on '%s'", podName, nodeName(tmpIdx))
-		if err := data.createBusyboxPodOnNodeByIdx(podName, tmpIdx); err != nil {
+		isWindows = append(isWindows, isWindowsNode(nodeName))
+		t.Logf("Creating busybox test Pods '%s' on '%s'", podName, nodeName)
+		if err := data.createBusyboxPodOnNode(podName, nodeName); err != nil {
 			cleanup()
 			t.Fatalf("Error when creating busybox test Pod '%s': %v", podName, err)
 		}
@@ -365,17 +365,16 @@ func TestOVSFlowReplay(t *testing.T) {
 	for idx := range podNames {
 		podNames[idx] = randName(fmt.Sprintf("test-pod-%d-", idx))
 	}
+	workerNode := workerNodeName(1)
 
-	var idx = 1
 	if len(clusterInfo.windowsNodes) != 0 {
-		idx = clusterInfo.windowsNodes[0]
+		workerNode = clusterInfo.windowsNodes[0]
 	}
-	workerNode := workerNodeName(idx)
-	isWindows := []bool{isWindowsNode(idx), isWindowsNode(idx)}
+	isWindows := []bool{isWindowsNode(workerNode), isWindowsNode(workerNode)}
 
 	t.Logf("Creating %d busybox test Pods on '%s'", numPods, workerNode)
 	for _, podName := range podNames {
-		if err := data.createBusyboxPodOnNodeByIdx(podName, idx); err != nil {
+		if err := data.createBusyboxPodOnNode(podName, workerNode); err != nil {
 			t.Fatalf("Error when creating busybox test Pod '%s': %v", podName, err)
 		}
 		defer deletePodWrapper(t, data, podName)
@@ -414,6 +413,7 @@ func TestOVSFlowReplay(t *testing.T) {
 // and this test was failing when Antrea was running on a Kind cluster.
 func TestPingLargeMTU(t *testing.T) {
 	skipIfNumNodesLessThan(t, 2)
+	skipIfHasWindowsNodes(t)
 
 	data, err := setupTest(t)
 	if err != nil {

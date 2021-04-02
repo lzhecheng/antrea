@@ -126,7 +126,8 @@ type ClusterInfo struct {
 	controlPlaneNodeName string
 	nodes                map[int]ClusterNode
 	k8sServerVersion     string
-	windowsNodes         []int
+	windowsNodes         []string
+	windowsNodeIdxes     []int
 }
 
 var clusterInfo ClusterInfo
@@ -219,9 +220,9 @@ func workerNodeIP(idx int) string {
 	}
 }
 
-func isWindowsNode(idx int) bool {
-	for _, i := range clusterInfo.windowsNodes {
-		if i == idx {
+func isWindowsNode(name string) bool {
+	for _, n := range clusterInfo.windowsNodes {
+		if n == name {
 			return true
 		}
 	}
@@ -376,7 +377,8 @@ func collectClusterInfo() error {
 			gwV6Addr:         gwV6Addr,
 		}
 		if node.Status.NodeInfo.OperatingSystem == "windows" {
-			clusterInfo.windowsNodes = append(clusterInfo.windowsNodes, nodeIdx)
+			clusterInfo.windowsNodes = append(clusterInfo.windowsNodes, node.Name)
+			clusterInfo.windowsNodeIdxes = append(clusterInfo.windowsNodeIdxes, nodeIdx)
 		}
 	}
 	if clusterInfo.controlPlaneNodeName == "" {
@@ -928,17 +930,11 @@ func (data *TestData) createPodOnNodeInNamespace(name, ns string, nodeName, ctrN
 // Pod will be scheduled on the specified Node (if nodeName is not empty).
 func (data *TestData) createBusyboxPodOnNode(name string, nodeName string) error {
 	sleepDuration := 3600 // seconds
-	return data.createPodOnNode(name, nodeName, busyboxImage, []string{"sleep", strconv.Itoa(sleepDuration)}, nil, nil, nil, false, nil)
-}
-
-// createBusyboxPodOnNodeByIdx creates a Pod with Node Index. Windows use.
-func (data *TestData) createBusyboxPodOnNodeByIdx(name string, nodeIdx int) error {
-	sleepDuration := 3600 // seconds
 	image := busyboxImage
-	if isWindowsNode(nodeIdx) {
+	if isWindowsNode(nodeName) {
 		image = busyboxWindowsImage
 	}
-	return data.createPodOnNode(name, workerNodeName(nodeIdx), image, []string{"sleep", strconv.Itoa(sleepDuration)}, nil, nil, nil, false, nil)
+	return data.createPodOnNode(name, nodeName, image, []string{"sleep", strconv.Itoa(sleepDuration)}, nil, nil, nil, false, nil)
 }
 
 // createHostNetworkBusyboxPodOnNode creates a host network Pod in the test namespace with a single busybox container.
