@@ -164,10 +164,10 @@ func createPodsOnDifferentNodes(t *testing.T, data *TestData, numPods int) (podN
 	for remain := numPods; remain > 0; remain-- {
 		podName := randName(fmt.Sprintf("test-pod-%d-", idx))
 		isWindows = append(isWindows, isWindowsNode(idx))
-		nodeName := nodeName(idx % clusterInfo.numNodes)
+		tmpIdx := idx % clusterInfo.numNodes
 		idx++
-		t.Logf("Creating busybox test Pods '%s' on '%s'", podName, nodeName)
-		if err := data.createBusyboxPodOnNode(podName, nodeName); err != nil {
+		t.Logf("Creating busybox test Pods '%s' on '%s'", podName, nodeName(tmpIdx))
+		if err := data.createBusyboxPodOnNodeByIdx(podName, tmpIdx); err != nil {
 			cleanup()
 			t.Fatalf("Error when creating busybox test Pod '%s': %v", podName, err)
 		}
