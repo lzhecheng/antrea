@@ -17,6 +17,8 @@
 package cniserver
 
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -28,6 +30,9 @@ import (
 	"github.com/Microsoft/hcsshim/hcn"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog"
 
@@ -105,6 +110,42 @@ func findContainerIPConfig(ips []*current.IPConfig) (*current.IPConfig, error) {
 	return nil, fmt.Errorf("failed to find a valid IP address")
 }
 
+func runCommandOnContainer(id string, cmd string) (string, error) {
+	cli, err := client.NewClientWithOpts()
+	if err != nil {
+		return "", err
+	}
+	ctx := context.Background()
+	config := types.ExecConfig{
+		Cmd:          strings.Split(cmd, " "),
+		AttachStdout: true,
+		AttachStderr: true,
+	}
+	response, err := cli.ContainerExecCreate(ctx, id, config)
+	if err != nil {
+		return "", err
+	}
+	execID := response.ID
+
+	execConfig := types.ExecStartCheck{Tty: false, Detach: false}
+	resp, err := cli.ContainerExecAttach(ctx, execID, execConfig)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Close()
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	_, err = stdcopy.StdCopy(stdout, stderr, resp.Reader)
+	if err != nil {
+		return "", err
+	}
+	s := stdout.String()
+	fmt.Println(s)
+	i := stderr.String()
+	fmt.Println(i)
+	return s, nil
+}
+
 // configureContainerLink creates a HNSEndpoint for the container using the IPAM result, and then attach it on the container interface.
 func (ic *ifConfigurator) configureContainerLink(
 	podName string,
@@ -157,6 +198,13 @@ func (ic *ifConfigurator) configureContainerLink(
 	// Update IPConfig with the index of target interface in the result. The index is used in CNI CmdCheck.
 	ifaceIdx := 1
 	containerIP.Interface = &ifaceIdx
+
+	// Configure the container MTU
+	output, err := runCommandOnContainer(containerID, "netsh interface ipv4 show subinterface")
+	if err != nil {
+		return err
+	}
+	klog.Infof("lzc show subinterface: %s", output)
 	return nil
 }
 
