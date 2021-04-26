@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientset "k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
 	"k8s.io/klog"
 
 	"github.com/vmware-tanzu/antrea/pkg/agent/cniserver/ipam"
@@ -40,6 +41,7 @@ import (
 	"github.com/vmware-tanzu/antrea/pkg/agent/route"
 	"github.com/vmware-tanzu/antrea/pkg/agent/types"
 	"github.com/vmware-tanzu/antrea/pkg/agent/util"
+	"github.com/vmware-tanzu/antrea/pkg/antctl/runtime"
 	cnipb "github.com/vmware-tanzu/antrea/pkg/apis/cni/v1beta1"
 	"github.com/vmware-tanzu/antrea/pkg/cni"
 	"github.com/vmware-tanzu/antrea/pkg/ovs/ovsconfig"
@@ -110,6 +112,7 @@ type CNIServer struct {
 	routeClient          route.Interface
 	// networkReadyCh notifies that the network is ready so new Pods can be created. Therefore, CmdAdd waits for it.
 	networkReadyCh <-chan struct{}
+	kubeConfig           *restclient.Config
 }
 
 var supportedCNIVersionSet map[string]bool
@@ -458,6 +461,11 @@ func (s *CNIServer) CmdAdd(ctx context.Context, request *cnipb.CniCmdRequest) (*
 		return s.configInterfaceFailureResponse(err), nil
 	}
 
+	// MTU issue, Windows only.
+	if err := s.configureWindowsMTU(podNamespace, podName, cniConfig.ContainerId, cniConfig.MTU, cniConfig.Ifname); err != nil {
+		klog.Errorf("Failed to configure MTU on Windows Pod: %v", err)
+	}
+
 	klog.Infof("CmdAdd for container %v succeeded", cniConfig.ContainerId)
 	// mark success as true to avoid rollback
 	success = true
@@ -536,8 +544,9 @@ func New(
 	isChaining bool,
 	routeClient route.Interface,
 	networkReadyCh <-chan struct{},
+	kubeconfig string,
 ) *CNIServer {
-	return &CNIServer{
+	cniServer:= CNIServer{
 		cniSocket:            cniSocket,
 		supportedCNIVersions: supportedCNIVersionSet,
 		serverVersion:        cni.AntreaCNIVersion,
@@ -549,6 +558,11 @@ func New(
 		routeClient:          routeClient,
 		networkReadyCh:       networkReadyCh,
 	}
+	var err error
+	if cniServer.kubeConfig, err = runtime.ResolveKubeconfig(kubeconfig); err != nil {
+		klog.Errorf("Failed to resolve kubeconfig", err)
+	}
+	return &cniServer
 }
 
 func (s *CNIServer) Initialize(

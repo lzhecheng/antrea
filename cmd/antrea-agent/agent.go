@@ -225,7 +225,8 @@ func run(o *Options) error {
 		k8sClient,
 		isChaining,
 		routeClient,
-		networkReadyCh)
+		networkReadyCh,
+		o.config.ClientConnection.Kubeconfig)
 	err = cniServer.Initialize(ovsBridgeClient, ofClient, ifaceStore, entityUpdates)
 	if err != nil {
 		return fmt.Errorf("error initializing CNI server: %v", err)

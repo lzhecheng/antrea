@@ -272,6 +272,10 @@ func (ic *ifConfigurator) advertiseContainerAddr(containerNetNS string, containe
 	return nil
 }
 
+func (s *CNIServer) configureWindowsMTU(podNamespace string, podName string, containerID string, mtu int, ifaceName string) error {
+	return nil
+}
+
 // configureContainerLink creates a veth pair: one in the container netns and one in the host netns, and configures IP
 // address and routes to the container veth.
 func (ic *ifConfigurator) configureContainerLink(

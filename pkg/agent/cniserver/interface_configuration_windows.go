@@ -33,7 +33,10 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/klog"
 
 	"github.com/vmware-tanzu/antrea/pkg/agent/interfacestore"
@@ -146,6 +149,34 @@ func runCommandOnContainer(id string, cmd string) (string, error) {
 	return s, nil
 }
 
+func (s *CNIServer) configureWindowsMTU(podNamespace string, podName string, containerID string, mtu int, ifaceName string) error {
+	requestMTU := s.kubeClient.CoreV1().RESTClient().Post().
+		Namespace(podNamespace).
+		Resource("pods").
+		Name(podName).
+		SubResource("exec").
+		Param("containerID", containerID).
+		VersionedParams(&corev1.PodExecOptions{
+			Command: []string{"netsh", "interface", "ipv4", "set", "subinterface", ifaceName, fmt.Sprintf("mtu=%d", mtu), "store=persistent"},
+			Stdin:   false,
+			Stdout:  true,
+			Stderr:  true,
+			TTY:     false,
+		}, scheme.ParameterCodec)
+	exec, err := remotecommand.NewSPDYExecutor(s.kubeConfig, "POST", requestMTU.URL())
+	if err != nil {
+		return err
+	}
+	var stdoutB, stderrB bytes.Buffer
+	err = exec.Stream(remotecommand.StreamOptions{
+		Stdout: &stdoutB,
+		Stderr: &stderrB,
+	})
+	klog.Infof("lzc stdoutB: %s", stdoutB)
+	klog.Infof("lzc stderrB: %s", stderrB)
+	return err
+}
+
 // configureContainerLink creates a HNSEndpoint for the container using the IPAM result, and then attach it on the container interface.
 func (ic *ifConfigurator) configureContainerLink(
 	podName string,
@@ -200,11 +231,12 @@ func (ic *ifConfigurator) configureContainerLink(
 	containerIP.Interface = &ifaceIdx
 
 	// Configure the container MTU
-	output, err := runCommandOnContainer(containerID, "netsh interface ipv4 show subinterface")
-	if err != nil {
-		return err
-	}
-	klog.Infof("lzc show subinterface: %s", output)
+	//output, err := runCommandOnContainer(containerID, "netsh interface ipv4 show subinterface")
+	//if err != nil {
+	//	return err
+	//}
+	//klog.Infof("lzc show subinterface: %s", output)
+
 	return nil
 }
 
