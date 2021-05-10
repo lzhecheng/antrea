@@ -1179,6 +1179,7 @@ func (c *client) l3FwdFlowToRemote(
 // l3FwdFlowToRemoteViaGW generates the L3 forward flow to support traffic to
 // remote via gateway. It is used when the cross-Node traffic does not require
 // encapsulation (in noEncap, networkPolicyOnly, or hybrid mode).
+// rename via routing
 func (c *client) l3FwdFlowToRemoteViaGW(
 	localGatewayMAC net.HardwareAddr,
 	peerSubnet net.IPNet,
@@ -1187,6 +1188,8 @@ func (c *client) l3FwdFlowToRemoteViaGW(
 	l3FwdTable := c.pipeline[l3ForwardingTable]
 	return l3FwdTable.BuildFlow(priorityNormal).MatchProtocol(ipProto).
 		MatchDstIPNet(peerSubnet).
+		// edit localgatewaymac
+		// origin and plus, if plus, replace original one
 		Action().SetDstMAC(localGatewayMAC).
 		Action().GotoTable(l3FwdTable.GetNext()).
 		Cookie(c.cookieAllocator.Request(category).Raw()).
