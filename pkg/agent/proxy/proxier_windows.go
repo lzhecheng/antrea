@@ -18,6 +18,7 @@ package proxy
 import (
 	"net"
 
+	"antrea.io/antrea/pkg/agent/config"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 )
 
@@ -43,4 +44,22 @@ func (p *proxier) uninstallLoadBalancerServiceFlows(svcIP net.IP, svcPort uint16
 		return err
 	}
 	return nil
+}
+
+func (p *proxier) addClusterIPServiceRoutes(svcIP net.IP, gwConfig *config.GatewayConfig) error {
+	if gwConfig.IPv4 != nil {
+		if err := p.routeClient.AddServiceRoutes(svcIP, gwConfig.IPv4); err != nil {
+			return err
+		}
+	}
+	if gwConfig.IPv6 != nil {
+		if err := p.routeClient.AddServiceRoutes(svcIP, gwConfig.IPv6); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *proxier) deleteClusterIPServiceRoutes(svcIP net.IP) error {
+	return p.routeClient.DeleteServiceRoutes(svcIP)
 }

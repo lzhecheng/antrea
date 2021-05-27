@@ -77,6 +77,20 @@ func (mr *MockInterfaceMockRecorder) AddSNATRule(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSNATRule", reflect.TypeOf((*MockInterface)(nil).AddSNATRule), arg0, arg1)
 }
 
+// AddServiceRoutes mocks base method
+func (m *MockInterface) AddServiceRoutes(arg0, arg1 net.IP) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddServiceRoutes", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddServiceRoutes indicates an expected call of AddServiceRoutes
+func (mr *MockInterfaceMockRecorder) AddServiceRoutes(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddServiceRoutes", reflect.TypeOf((*MockInterface)(nil).AddServiceRoutes), arg0, arg1)
+}
+
 // DeleteRoutes mocks base method
 func (m *MockInterface) DeleteRoutes(arg0 *net.IPNet) error {
 	m.ctrl.T.Helper()
@@ -103,6 +117,20 @@ func (m *MockInterface) DeleteSNATRule(arg0 uint32) error {
 func (mr *MockInterfaceMockRecorder) DeleteSNATRule(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSNATRule", reflect.TypeOf((*MockInterface)(nil).DeleteSNATRule), arg0)
+}
+
+// DeleteServiceRoutes mocks base method
+func (m *MockInterface) DeleteServiceRoutes(arg0 net.IP) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteServiceRoutes", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteServiceRoutes indicates an expected call of DeleteServiceRoutes
+func (mr *MockInterfaceMockRecorder) DeleteServiceRoutes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteServiceRoutes", reflect.TypeOf((*MockInterface)(nil).DeleteServiceRoutes), arg0)
 }
 
 // Initialize mocks base method
@@ -134,17 +162,17 @@ func (mr *MockInterfaceMockRecorder) MigrateRoutesToGw(arg0 interface{}) *gomock
 }
 
 // Reconcile mocks base method
-func (m *MockInterface) Reconcile(arg0 []string) error {
+func (m *MockInterface) Reconcile(arg0 []string, arg1 map[string]bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Reconcile", arg0)
+	ret := m.ctrl.Call(m, "Reconcile", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Reconcile indicates an expected call of Reconcile
-func (mr *MockInterfaceMockRecorder) Reconcile(arg0 interface{}) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) Reconcile(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reconcile", reflect.TypeOf((*MockInterface)(nil).Reconcile), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reconcile", reflect.TypeOf((*MockInterface)(nil).Reconcile), arg0, arg1)
 }
 
 // Run mocks base method

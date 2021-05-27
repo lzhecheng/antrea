@@ -553,7 +553,8 @@ func TestProxyServiceFlows(t *testing.T) {
 	for _, tc := range tcs {
 		groupID := ofconfig.GroupIDType(tc.gid)
 		expTableFlows, expGroupBuckets := expectedProxyServiceGroupAndFlows(tc.gid, tc.svc, tc.endpoints, tc.stickyAge)
-		installServiceFlows(t, tc.gid, tc.svc, tc.endpoints, tc.stickyAge)
+		gw := config1.GatewayConfig{}
+		installServiceFlows(t, tc.gid, tc.svc, tc.endpoints, tc.stickyAge, &gw)
 		for _, tableFlow := range expTableFlows {
 			ofTestUtils.CheckFlowExists(t, ovsCtlClient, tableFlow.tableID, true, tableFlow.flows)
 		}
@@ -568,7 +569,7 @@ func TestProxyServiceFlows(t *testing.T) {
 
 }
 
-func installServiceFlows(t *testing.T, gid uint32, svc svcConfig, endpointList []k8sproxy.Endpoint, stickyMaxAgeSeconds uint16) {
+func installServiceFlows(t *testing.T, gid uint32, svc svcConfig, endpointList []k8sproxy.Endpoint, stickyMaxAgeSeconds uint16, gwConfig *config1.GatewayConfig) {
 	groupID := ofconfig.GroupIDType(gid)
 	err := c.InstallEndpointFlows(svc.protocol, endpointList)
 	assert.NoError(t, err, "no error should return when installing flows for Endpoints")

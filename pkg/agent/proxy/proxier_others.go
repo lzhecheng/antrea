@@ -16,8 +16,10 @@
 package proxy
 
 import (
+	"fmt"
 	"net"
 
+	"antrea.io/antrea/pkg/agent/config"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 )
 
@@ -36,4 +38,14 @@ func (p *proxier) uninstallLoadBalancerServiceFlows(svcIP net.IP, svcPort uint16
 		return err
 	}
 	return nil
+}
+
+// addClusterIPServiceRoutes is only used for Windows Cluster IP Service.
+func (p *proxier) addClusterIPServiceRoutes(svcIP net.IP, gwConfig *config.GatewayConfig) error {
+	return fmt.Errorf("addClusterIPServiceRoutes is not implemented on Linux")
+}
+
+// deleteClusterIPServiceRoutes is only used for Windows Cluster IP Service.
+func (p *proxier) deleteClusterIPServiceRoutes(svcIP net.IP) error {
+	return fmt.Errorf("deleteClusterIPServiceRoutes is not implemented on Linux")
 }

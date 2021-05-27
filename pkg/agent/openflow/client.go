@@ -388,7 +388,7 @@ func (c *client) InstallNodeFlows(hostname string,
 		if peerGatewayIP.To4() != nil {
 			// Since broadcast is not supported in IPv6, ARP should happen only with IPv4 address, and ARP responder flows
 			// only work for IPv4 addresses.
-			flows = append(flows, c.arpResponderFlow(peerGatewayIP, cookie.Node))
+			flows = append(flows, c.arpResponderFlow(peerGatewayIP, globalVirtualMAC, priorityNormal, cookie.Node))
 		}
 		if c.encapMode.NeedsEncapToPeer(tunnelPeerIP, c.nodeConfig.NodeIPAddr) {
 			// tunnelPeerIP is the Node Internal Address. In a dual-stack setup, whether this address is an IPv4 address or an
@@ -536,18 +536,6 @@ func (c *client) UninstallEndpointFlows(protocol binding.Protocol, endpoint prox
 	}
 	cacheKey := generateEndpointFlowCacheKey(endpoint.IP(), port, protocol)
 	return c.deleteFlows(c.serviceFlowCache, cacheKey)
-}
-
-func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error {
-	c.replayMutex.RLock()
-	defer c.replayMutex.RUnlock()
-	var flows []binding.Flow
-	flows = append(flows, c.serviceLBFlow(groupID, svcIP, svcPort, protocol, affinityTimeout != 0))
-	if affinityTimeout != 0 {
-		flows = append(flows, c.serviceLearnFlow(groupID, svcIP, svcPort, protocol, affinityTimeout))
-	}
-	cacheKey := generateServicePortFlowCacheKey(svcIP, svcPort, protocol)
-	return c.addFlows(c.serviceFlowCache, cacheKey, flows)
 }
 
 func (c *client) UninstallServiceFlows(svcIP net.IP, svcPort uint16, protocol binding.Protocol) error {

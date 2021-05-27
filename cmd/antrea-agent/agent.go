@@ -170,11 +170,11 @@ func run(o *Options) error {
 		v6Enabled := config.IsIPv6Enabled(nodeConfig, networkConfig.TrafficEncapMode)
 		switch {
 		case v4Enabled && v6Enabled:
-			proxier = proxy.NewDualStackProxier(nodeConfig.Name, informerFactory, ofClient)
+			proxier = proxy.NewDualStackProxier(nodeConfig.Name, nodeConfig.GatewayConfig, informerFactory, ofClient, routeClient)
 		case v4Enabled:
-			proxier = proxy.NewProxier(nodeConfig.Name, informerFactory, ofClient, false)
+			proxier = proxy.NewProxier(nodeConfig.Name, nodeConfig.GatewayConfig, informerFactory, ofClient, routeClient, false)
 		case v6Enabled:
-			proxier = proxy.NewProxier(nodeConfig.Name, informerFactory, ofClient, true)
+			proxier = proxy.NewProxier(nodeConfig.Name, nodeConfig.GatewayConfig, informerFactory, ofClient, routeClient, true)
 		default:
 			return fmt.Errorf("at least one of IPv4 or IPv6 should be enabled")
 		}

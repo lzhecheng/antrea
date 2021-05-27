@@ -43,6 +43,7 @@ const (
 	// Flow table id index
 	ClassifierTable              binding.TableIDType = 0
 	uplinkTable                  binding.TableIDType = 5
+	unSNATTable                  binding.TableIDType = 6
 	spoofGuardTable              binding.TableIDType = 10
 	arpResponderTable            binding.TableIDType = 20
 	ipv6Table                    binding.TableIDType = 21
@@ -91,6 +92,10 @@ const (
 	ipv6MulticastAddr = "FF00::/8"
 	// IPv6 link-local prefix
 	ipv6LinkLocalAddr = "FE80::/10"
+
+	// ARP operations
+	arpOpRequest = uint16(1)
+	arpOpReply   = uint16(2)
 )
 
 type ofAction int32
@@ -129,6 +134,7 @@ var (
 	}{
 		{ClassifierTable, "Classification"},
 		{uplinkTable, "Uplink"},
+		{unSNATTable, "UnSNAT"},
 		{spoofGuardTable, "SpoofGuard"},
 		{arpResponderTable, "ARPResponder"},
 		{ipv6Table, "IPv6"},
@@ -1242,19 +1248,18 @@ func (c *client) l3FwdFlowToRemoteViaGW(
 		Done()
 }
 
-// arpResponderFlow generates the ARP responder flow entry that replies request comes from local gateway for peer
-// gateway MAC.
-func (c *client) arpResponderFlow(peerGatewayIP net.IP, category cookie.Category) binding.Flow {
-	return c.pipeline[arpResponderTable].BuildFlow(priorityNormal).MatchProtocol(binding.ProtocolARP).
-		MatchARPOp(1).
-		MatchARPTpa(peerGatewayIP).
+// arpResponderFlow generates the ARP responder flow entry that replies request for provided IP and MAC.
+func (c *client) arpResponderFlow(ip net.IP, mac net.HardwareAddr, priority uint16, category cookie.Category) binding.Flow {
+	return c.pipeline[arpResponderTable].BuildFlow(priority).MatchProtocol(binding.ProtocolARP).
+		MatchARPOp(arpOpRequest).
+		MatchARPTpa(ip).
 		Action().Move(binding.NxmFieldSrcMAC, binding.NxmFieldDstMAC).
-		Action().SetSrcMAC(globalVirtualMAC).
-		Action().LoadARPOperation(2).
+		Action().SetSrcMAC(mac).
+		Action().LoadARPOperation(arpOpReply).
 		Action().Move(binding.NxmFieldARPSha, binding.NxmFieldARPTha).
-		Action().SetARPSha(globalVirtualMAC).
+		Action().SetARPSha(mac).
 		Action().Move(binding.NxmFieldARPSpa, binding.NxmFieldARPTpa).
-		Action().SetARPSpa(peerGatewayIP).
+		Action().SetARPSpa(ip).
 		Action().OutputInPort().
 		Cookie(c.cookieAllocator.Request(category).Raw()).
 		Done()
@@ -1264,10 +1269,10 @@ func (c *client) arpResponderFlow(peerGatewayIP net.IP, category cookie.Category
 // This flow is used in policy-only mode, where traffic are routed via IP not MAC.
 func (c *client) arpResponderStaticFlow(category cookie.Category) binding.Flow {
 	return c.pipeline[arpResponderTable].BuildFlow(priorityNormal).MatchProtocol(binding.ProtocolARP).
-		MatchARPOp(1).
+		MatchARPOp(arpOpRequest).
 		Action().Move(binding.NxmFieldSrcMAC, binding.NxmFieldDstMAC).
 		Action().SetSrcMAC(globalVirtualMAC).
-		Action().LoadARPOperation(2).
+		Action().LoadARPOperation(arpOpReply).
 		Action().Move(binding.NxmFieldARPSha, binding.NxmFieldARPTha).
 		Action().SetARPSha(globalVirtualMAC).
 		Action().Move(binding.NxmFieldARPTpa, swapReg.nxm()).
@@ -2184,6 +2189,9 @@ func (c *client) generatePipeline() {
 		c.pipeline[endpointDNATTable] = bridge.CreateTable(endpointDNATTable, c.egressEntryTable, binding.TableMissActionNext)
 		c.pipeline[conntrackCommitTable] = bridge.CreateTable(conntrackCommitTable, hairpinSNATTable, binding.TableMissActionNext)
 		c.pipeline[hairpinSNATTable] = bridge.CreateTable(hairpinSNATTable, L2ForwardingOutTable, binding.TableMissActionNext)
+		if runtime.IsWindowsPlatform() {
+			c.pipeline[unSNATTable] = bridge.CreateTable(unSNATTable, conntrackTable, binding.TableMissActionNext)
+		}
 	} else {
 		c.pipeline[spoofGuardTable] = bridge.CreateTable(spoofGuardTable, conntrackTable, binding.TableMissActionDrop)
 		c.pipeline[ipv6Table] = bridge.CreateTable(ipv6Table, conntrackTable, binding.TableMissActionNext)

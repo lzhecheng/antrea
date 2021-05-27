@@ -17,11 +17,13 @@ package e2e
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // TestClusterIP tests traffic from Nodes and Pods to ClusterIP Service.
@@ -51,6 +53,41 @@ func TestClusterIP(t *testing.T) {
 		}
 	}
 
+	testFromWindowsNode := func(node string) {
+		getGWCmd := fmt.Sprintf("powershell \"Get-NetIPAddress -InterfaceAlias antrea-gw0 -AddressFamily IPv4 | Select-Object -Property IPAddress | Format-Table -HideTableHeaders\"")
+		getGWRc, getGWStdout, getGWStderr, err := RunCommandOnNode(node, getGWCmd)
+		if getGWRc != 0 || err != nil {
+			t.Fatalf("Error when running command '%s' on Node '%s', rc: %d, stdout: %s, stderr: %s, error: %v",
+				getGWCmd, node, getGWRc, getGWStdout, getGWStderr, err)
+		}
+		gwIP := strings.TrimSpace(getGWStdout)
+
+		var printStdout string
+		if err := wait.PollImmediate(defaultInterval, defaultTimeout, func() (added bool, err error) {
+			printCmd := fmt.Sprintf("powershell \"route print | grep %s\"", svc.Spec.ClusterIP)
+			printRc, printStdout, printStderr, err := RunCommandOnNode(node, printCmd)
+			if printRc == 1 {
+				return false, nil
+			}
+			if err != nil {
+				printErr := fmt.Errorf("error when running command '%s' on Node '%s', rc: %d, stdout: %s, stderr: %s, error: %v",
+					printCmd, node, printRc, printStdout, printStderr, err)
+				return false, printErr
+			}
+			r := regexp.MustCompile(fmt.Sprintf("%s +255.255.255.255 +169.254.169.253 +%s +65", svc.Spec.ClusterIP, gwIP))
+			if !r.MatchString(printStdout) {
+				return false, nil
+			}
+			return true, nil
+		}); err == wait.ErrWaitTimeout {
+			t.Fatalf("With antrea-proxy enabled, antrea-gw '%s', host route is not as expected, stdout: %s", gwIP, printStdout)
+		} else if err != nil {
+			t.Fatalf("With antrea-proxy enabled, antrea-gw '%s', host route is not as expected: %v", gwIP, err)
+		} else {
+			t.Logf("Expected host route is found")
+		}
+	}
+
 	testFromPod := func(podName, nodeName string) {
 		require.NoError(t, data.createBusyboxPodOnNode(podName, nodeName))
 		defer data.deletePodAndWait(defaultTimeout, podName)
@@ -74,7 +111,7 @@ func TestClusterIP(t *testing.T) {
 			skipIfNoWindowsNodes(t)
 			idx := clusterInfo.windowsNodes[0]
 			winNode := clusterInfo.nodes[idx].name
-			testFromNode(winNode)
+			testFromWindowsNode(winNode)
 		})
 		t.Run("Linux Pod on same Node can access the Service", func(t *testing.T) {
 			t.Parallel()

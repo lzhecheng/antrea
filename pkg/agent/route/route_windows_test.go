@@ -50,6 +50,13 @@ func TestRouteOperation(t *testing.T) {
 	gwIP2 := net.ParseIP("192.168.3.1")
 	_, destCIDR2, _ := net.ParseCIDR(dest2)
 
+	svcStr1 := "1.1.0.10"
+	svcIP1 := net.ParseIP(svcStr1)
+	svcIPNet1 := net.IPNet{IP: svcIP1, Mask: net.CIDRMask(32, 32)}
+	svcStr2 := "1.1.0.11"
+	svcIP2 := net.ParseIP(svcStr2)
+	svcIPNet2 := net.IPNet{IP: svcIP2, Mask: net.CIDRMask(32, 32)}
+
 	nr := netroute.New()
 	defer nr.Exit()
 
@@ -80,15 +87,38 @@ func TestRouteOperation(t *testing.T) {
 	require.Nil(t, err)
 	assert.Equal(t, 1, len(routes2))
 
-	err = client.Reconcile([]string{dest2})
+	err = client.AddServiceRoutes(svcIP1, GlobalVirtualGWIP)
 	require.Nil(t, err)
-	routes3, err := nr.GetNetRoutes(gwLink, destCIDR1)
+	route3, err := nr.GetNetRoutes(gwLink, &svcIPNet1)
 	require.Nil(t, err)
-	assert.Equal(t, 0, len(routes3))
+	assert.Equal(t, 1, len(route3))
+
+	err = client.AddServiceRoutes(svcIP2, GlobalVirtualGWIP)
+	require.Nil(t, err)
+	route4, err := nr.GetNetRoutes(gwLink, &svcIPNet2)
+	require.Nil(t, err)
+	assert.Equal(t, 1, len(route4))
+
+	err = client.Reconcile([]string{dest2}, map[string]bool{svcIPNet1.String(): true})
+	require.Nil(t, err)
+
+	routes5, err := nr.GetNetRoutes(gwLink, destCIDR1)
+	require.Nil(t, err)
+	assert.Equal(t, 0, len(routes5))
+
+	routes6, err := nr.GetNetRoutes(gwLink, &svcIPNet2)
+	require.Nil(t, err)
+	assert.Equal(t, 0, len(routes6))
 
 	err = client.DeleteRoutes(destCIDR2)
 	require.Nil(t, err)
-	routes4, err := nr.GetNetRoutes(gwLink, destCIDR2)
+	routes7, err := nr.GetNetRoutes(gwLink, destCIDR2)
 	require.Nil(t, err)
-	assert.Equal(t, 0, len(routes4))
+	assert.Equal(t, 0, len(routes7))
+
+	err = client.DeleteServiceRoutes(svcIP1)
+	require.Nil(t, err)
+	routes8, err := nr.GetNetRoutes(gwLink, &svcIPNet1)
+	require.Nil(t, err)
+	assert.Equal(t, 0, len(routes8))
 }

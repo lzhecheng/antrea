@@ -69,6 +69,7 @@ type Controller struct {
 	nodeInformer     coreinformers.NodeInformer
 	nodeLister       corelisters.NodeLister
 	nodeListerSynced cache.InformerSynced
+	svcLister        corelisters.ServiceLister
 	queue            workqueue.RateLimitingInterface
 	// installedNodes records routes and flows installation states of Nodes.
 	// The key is the host name of the Node, the value is the nodeRouteInfo of the Node.
@@ -88,6 +89,7 @@ func NewNodeRouteController(
 	networkConfig *config.NetworkConfig,
 	nodeConfig *config.NodeConfig) *Controller {
 	nodeInformer := informerFactory.Core().V1().Nodes()
+	svcLister := informerFactory.Core().V1().Services()
 	controller := &Controller{
 		kubeClient:       kubeClient,
 		ovsBridgeClient:  ovsBridgeClient,
@@ -99,6 +101,7 @@ func NewNodeRouteController(
 		nodeInformer:     nodeInformer,
 		nodeLister:       nodeInformer.Lister(),
 		nodeListerSynced: nodeInformer.Informer().HasSynced,
+		svcLister:        svcLister.Lister(),
 		queue:            workqueue.NewNamedRateLimitingQueue(workqueue.NewItemExponentialFailureRateLimiter(minRetryDelay, maxRetryDelay), "noderoute"),
 		installedNodes:   cache.NewIndexer(nodeRouteInfoKeyFunc, cache.Indexers{nodeRouteInfoPodCIDRIndexName: nodeRouteInfoPodCIDRIndexFunc}),
 	}
@@ -183,8 +186,22 @@ func (c *Controller) removeStaleGatewayRoutes() error {
 		desiredPodCIDRs = append(desiredPodCIDRs, podCIDRs...)
 	}
 
+	svcs, err := c.svcLister.List(labels.Everything())
+	desiredClusterIPSvcIPs := map[string]bool{}
+	for _, svc := range svcs {
+		if svc.Spec.Type == corev1.ServiceTypeClusterIP {
+			for _, ip := range svc.Spec.ClusterIPs {
+				desiredClusterIPSvcIPs[ip] = true
+			}
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("error when listing ClusterIP Service IPs: %v", err)
+	}
+
 	// routeClient will remove orphaned routes whose destinations are not in desiredPodCIDRs.
-	if err := c.routeClient.Reconcile(desiredPodCIDRs); err != nil {
+	// It will also remove routes that are for Windows ClusterIP Services which don't exist any more.
+	if err := c.routeClient.Reconcile(desiredPodCIDRs, desiredClusterIPSvcIPs); err != nil {
 		return err
 	}
 	return nil
