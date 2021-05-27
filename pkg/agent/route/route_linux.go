@@ -447,8 +447,8 @@ func (c *Client) initIPRoutes() error {
 }
 
 // Reconcile removes orphaned podCIDRs from ipset and removes routes to orphaned podCIDRs
-// based on the desired podCIDRs.
-func (c *Client) Reconcile(podCIDRs []string) error {
+// based on the desired podCIDRs. svcIPs are used for Windows only.
+func (c *Client) Reconcile(podCIDRs []string, svcIPs map[string]bool) error {
 	desiredPodCIDRs := sets.NewString(podCIDRs...)
 
 	// Remove orphaned podCIDRs from ipset.
@@ -655,6 +655,14 @@ func (c *Client) DeleteRoutes(podCIDR *net.IPNet) error {
 		}
 	}
 	return nil
+}
+
+func (c *Client) AddServiceRoutes(svcIP net.IP, gwIP net.IP) error {
+	return fmt.Errorf("AddServiceRoutes is not implemented on Linux")
+}
+
+func (c *Client) DeleteServiceRoutes(svcIP net.IP) error {
+	return fmt.Errorf("DeleteServiceRoutes is not implemented on Linux")
 }
 
 // Join all words with spaces, terminate with newline and write to buf.

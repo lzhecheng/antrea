@@ -22,8 +22,11 @@ import (
 	"net"
 
 	"antrea.io/antrea/pkg/agent/openflow/cookie"
+	"antrea.io/antrea/pkg/agent/route"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 )
+
+var globalVirtualSVCMAC, _ = net.ParseMAC("aa:bb:cc:dd:ee:fe")
 
 func (c *client) InstallBridgeUplinkFlows() error {
 	flows := c.hostBridgeUplinkFlows(*c.nodeConfig.PodIPv4CIDR, cookie.Default)
@@ -48,4 +51,18 @@ func (c *client) UninstallLoadBalancerServiceFromOutsideFlows(svcIP net.IP, svcP
 	defer c.replayMutex.RUnlock()
 	cacheKey := fmt.Sprintf("L%s%s%x", svcIP, protocol, svcPort)
 	return c.deleteFlows(c.serviceFlowCache, cacheKey)
+}
+
+func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error {
+	c.replayMutex.RLock()
+	defer c.replayMutex.RUnlock()
+	var flows []binding.Flow
+	flows = append(flows, c.serviceLBFlow(groupID, svcIP, svcPort, protocol, affinityTimeout != 0))
+	if affinityTimeout != 0 {
+		flows = append(flows, c.serviceLearnFlow(groupID, svcIP, svcPort, protocol, affinityTimeout))
+	}
+
+	flows = append(flows, c.arpResponderFlow(route.GlobalVirtualGWIP, globalVirtualSVCMAC, priorityHigh, cookie.Service))
+	cacheKey := generateServicePortFlowCacheKey(svcIP, svcPort, protocol)
+	return c.addFlows(c.serviceFlowCache, cacheKey, flows)
 }

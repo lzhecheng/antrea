@@ -33,7 +33,7 @@ const (
 	// is not in "cluster-cidr". The request packets need to be SNAT'd(set src IP to local Node IP)
 	// after have been DNAT'd(set dst IP to endpoint IP).
 	// For example, the endpoint Pod may run in hostNetwork mode and the IP of the endpoint
-	// will is the current Node IP.
+	// will be the current Node IP.
 	// We need to use a different ct_zone to track the SNAT'd connection because OVS
 	// does not support doing both DNAT and SNAT in the same ct_zone.
 	//
@@ -48,12 +48,22 @@ const (
 
 	// snatCTMark indicates SNAT is performed for packets of the connection.
 	snatCTMark = 0x40
+
+	// trafficFromGatewayAndSNATMark indicates SNAT is performed on traffic from antrea-gw0.
+	trafficFromGatewayAndSNATMark = 0x20001
 )
 
 var (
 	// snatMarkRange takes the 17th bit of register marksReg to indicate if
 	// the packet needs to be SNATed with Node's IP or not.
 	snatMarkRange = binding.Range{17, 17}
+
+	// trafficFromAndSNATMarkRange takes 0-17th bits of registry marksReg to indicate
+	// if the packet needs to be SNATed and where it comes from.
+	trafficFromAndSNATMarkRange = binding.Range{0, 17}
+
+	// trafficFromRegRange takes 0..15 range of reg0 to indicate where the traffic is from.
+	trafficFromRegRange = binding.Range{0, 15}
 )
 
 // uplinkSNATFlows installs flows for traffic from the uplink port that help
@@ -190,11 +200,83 @@ func (c *client) snatImplementationFlows(nodeIP net.IP, category cookie.Category
 	return flows
 }
 
+// serviceSNATFlows installs flows to allow a Windows host to access a ClusterIP Service.
+func (c *client) serviceSNATFlows(nodeIP net.IP, localGatewayMAC net.HardwareAddr, category cookie.Category) []binding.Flow {
+	var flows []binding.Flow
+	if c.enableProxy {
+		flows = append(flows, []binding.Flow{
+			// If the host uses one IP other than Node management IP to access the Service, the Service reply
+			// packet needs unSNAT with snatCTMark mark.
+			c.pipeline[uplinkTable].BuildFlow(priorityNormal).
+				MatchProtocol(binding.ProtocolIP).
+				MatchRegRange(int(marksReg), markTrafficFromUplink, trafficFromRegRange).
+				Action().CT(false, unSNATTable, ctZoneSNAT).NAT().CTDone().
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+			c.pipeline[unSNATTable].BuildFlow(priorityNormal).
+				MatchProtocol(binding.ProtocolIP).
+				MatchCTMark(snatCTMark, nil).
+				MatchCTStateRpl(true).
+				MatchCTStateTrk(true).
+				Action().SetDstMAC(localGatewayMAC).
+				Action().GotoTable(conntrackTable).
+				Done(),
+			c.pipeline[unSNATTable].BuildFlow(priorityLow).
+				MatchRegRange(int(marksReg), markTrafficFromUplink, trafficFromRegRange).
+				Action().Output(config.BridgeOFPort).
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+			// Flows below are for hostNetwork ClusterIP Service which needs SNAT and the SNAT mark is set.
+			// The expected paths of request and reply are:
+			// Request:
+			// process --> antrea-gw0 --> DNAT --> SNAT --> antrea-gw0 --> host --> br-int --> Uplink --> RemoteNode
+			// Reply:
+			// RemoveNode --> Uplink --> br-int --> host --> unSNAT --> unDNAT --> antrea-gw0 --> process
+			c.pipeline[l3ForwardingTable].BuildFlow(priorityLow).MatchProtocol(binding.ProtocolIP).
+				MatchCTMark(ServiceCTMark, nil).
+				MatchRegRange(int(marksReg), markTrafficFromGateway, trafficFromRegRange).
+				Action().LoadRegRange(int(marksReg), snatDefaultMark, snatMarkRange).
+				Action().GotoTable(l2ForwardingCalcTable).
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+			// SNAT: antrea-gw0 -> NodeIP.
+			c.pipeline[conntrackCommitTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
+				MatchCTMark(ServiceCTMark, nil).
+				MatchCTStateNew(true).MatchCTStateTrk(true).
+				MatchRegRange(int(marksReg), snatDefaultMark, snatMarkRange).
+				MatchRegRange(int(marksReg), markTrafficFromGateway, trafficFromRegRange).
+				Action().CT(true, L2ForwardingOutTable, ctZoneSNAT).SNAT(
+				&binding.IPRange{StartIP: nodeIP, EndIP: nodeIP},
+				nil).
+				LoadToMark(snatCTMark).CTDone().
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+			c.pipeline[conntrackCommitTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
+				MatchCTMark(ServiceCTMark, nil).
+				MatchCTStateNew(false).MatchCTStateTrk(true).
+				MatchRegRange(int(marksReg), markTrafficFromGateway, trafficFromRegRange).
+				MatchRegRange(int(marksReg), snatDefaultMark, snatMarkRange).
+				Action().CT(false, L2ForwardingOutTable, ctZoneSNAT).NAT().CTDone().
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+			// The request packet is received from antrea-gw0 and will be sent back to antrea-gw0 for routing, so
+			// "in_port" is used as output which is required by OVS.
+			c.pipeline[L2ForwardingOutTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
+				MatchRegRange(int(marksReg), trafficFromGatewayAndSNATMark, trafficFromAndSNATMarkRange).
+				Action().OutputInPort().
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+		}...)
+	}
+	return flows
+}
+
 // externalFlows returns the flows needed to enable SNAT for external traffic.
 func (c *client) externalFlows(nodeIP net.IP, localSubnet net.IPNet, localGatewayMAC net.HardwareAddr) []binding.Flow {
 	flows := c.snatCommonFlows(nodeIP, localSubnet, localGatewayMAC, cookie.SNAT)
 	flows = append(flows, c.uplinkSNATFlows(localSubnet, cookie.SNAT)...)
 	flows = append(flows, c.snatImplementationFlows(nodeIP, cookie.SNAT)...)
+	flows = append(flows, c.serviceSNATFlows(nodeIP, localGatewayMAC, cookie.SNAT)...)
 	return flows
 }
 
@@ -233,7 +315,6 @@ func (c *client) snatMarkFlows(snatIP net.IP, mark uint32) []binding.Flow {
 // bridge local port and the uplink port to support the host traffic with
 // outside.
 func (c *client) hostBridgeUplinkFlows(localSubnet net.IPNet, category cookie.Category) (flows []binding.Flow) {
-	bridgeOFPort := uint32(config.BridgeOFPort)
 	flows = []binding.Flow{
 		c.pipeline[ClassifierTable].BuildFlow(priorityNormal).
 			MatchInPort(config.UplinkOFPort).
@@ -245,14 +326,6 @@ func (c *client) hostBridgeUplinkFlows(localSubnet net.IPNet, category cookie.Ca
 			MatchInPort(config.BridgeOFPort).
 			Action().LoadRegRange(int(marksReg), markTrafficFromBridge, binding.Range{0, 15}).
 			Action().GotoTable(uplinkTable).
-			Cookie(c.cookieAllocator.Request(category).Raw()).
-			Done(),
-		// Output non-IP packets to the bridge port directly. IP packets
-		// are redirected to conntrackTable in uplinkSNATFlows() (in
-		// case they need unSNAT).
-		c.pipeline[uplinkTable].BuildFlow(priorityLow).
-			MatchRegRange(int(marksReg), markTrafficFromUplink, binding.Range{0, 15}).
-			Action().Output(int(bridgeOFPort)).
 			Cookie(c.cookieAllocator.Request(category).Raw()).
 			Done(),
 		// Forward the packet to conntrackTable if it enters the OVS
@@ -273,10 +346,18 @@ func (c *client) hostBridgeUplinkFlows(localSubnet net.IPNet, category cookie.Ca
 			Action().GotoTable(conntrackTable).
 			Cookie(c.cookieAllocator.Request(category).Raw()).
 			Done(),
+		// Output non-IP packets to the bridge port directly. IP packets
+		// are redirected to conntrackTable in uplinkSNATFlows() (in
+		// case they need unSNAT).
+		c.pipeline[uplinkTable].BuildFlow(priorityLow).
+			MatchRegRange(int(marksReg), markTrafficFromUplink, trafficFromRegRange).
+			Action().Output(config.BridgeOFPort).
+			Cookie(c.cookieAllocator.Request(category).Raw()).
+			Done(),
 		// Output other packets from the bridge port to the uplink port
 		// directly.
 		c.pipeline[uplinkTable].BuildFlow(priorityLow).
-			MatchRegRange(int(marksReg), markTrafficFromBridge, binding.Range{0, 15}).
+			MatchRegRange(int(marksReg), markTrafficFromBridge, trafficFromRegRange).
 			Action().Output(config.UplinkOFPort).
 			Cookie(c.cookieAllocator.Request(category).Raw()).
 			Done(),

@@ -34,6 +34,14 @@ import (
 const (
 	inboundFirewallRuleName  = "Antrea: accept packets from local Pods"
 	outboundFirewallRuleName = "Antrea: accept packets to local Pods"
+
+	metricHigh   = uint16(256)
+	metricNormal = uint16(50)
+)
+
+var (
+	GlobalVirtualGWIP    = net.ParseIP("169.254.169.253").To4()
+	globalVirtualGWIPNet = net.IPNet{IP: GlobalVirtualGWIP, Mask: net.CIDRMask(32, 32)}
 )
 
 type Client struct {
@@ -84,9 +92,9 @@ func (c *Client) Initialize(nodeConfig *config.NodeConfig, done func()) error {
 	return nil
 }
 
-// Reconcile removes the orphaned routes and related configuration based on the desired podCIDRs. Only the route
-// entries on the host gateway interface are stored in the cache.
-func (c *Client) Reconcile(podCIDRs []string) error {
+// Reconcile removes the orphaned routes and related configuration based on the desired podCIDRs and Service IPs. Only
+// the route entries on the host gateway interface are stored in the cache.
+func (c *Client) Reconcile(podCIDRs []string, svcIPs map[string]bool) error {
 	desiredPodCIDRs := sets.NewString(podCIDRs...)
 	routes, err := c.listRoutes()
 	if err != nil {
@@ -94,6 +102,10 @@ func (c *Client) Reconcile(podCIDRs []string) error {
 	}
 	for dst, rt := range routes {
 		if desiredPodCIDRs.Has(dst) {
+			c.hostRoutes.Store(dst, rt)
+			continue
+		}
+		if _, ok := svcIPs[dst]; ok {
 			c.hostRoutes.Store(dst, rt)
 			continue
 		}
@@ -141,7 +153,7 @@ func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peer
 		return nil
 	}
 
-	if err := c.nr.NewNetRoute(route.LinkIndex, route.DestinationSubnet, route.GatewayAddress); err != nil {
+	if err := c.replaceNetRoute(route.LinkIndex, route.DestinationSubnet, route.GatewayAddress, metricHigh); err != nil {
 		return err
 	}
 
@@ -165,6 +177,83 @@ func (c *Client) DeleteRoutes(podCIDR *net.IPNet) error {
 	}
 	c.hostRoutes.Delete(podCIDR.String())
 	klog.V(2).Infof("Deleted route with destination %s from host gateway", podCIDR.String())
+	return nil
+}
+
+func (c *Client) AddServiceRoutes(svcIP net.IP, gwIP net.IP) error {
+	obj, found := c.hostRoutes.Load(svcIP.String())
+	svcIPNet := net.IPNet{IP: svcIP, Mask: net.CIDRMask(32, 32)}
+	metric := metricNormal
+	route := &netroute.Route{
+		LinkIndex:         c.nodeConfig.GatewayConfig.LinkIndex,
+		DestinationSubnet: &svcIPNet,
+		GatewayAddress:    gwIP,
+		RouteMetric:       int(metric),
+	}
+
+	if found {
+		existingRoute := obj.(*netroute.Route)
+		if existingRoute.GatewayAddress.Equal(route.GatewayAddress) && existingRoute.RouteMetric == route.RouteMetric {
+			klog.V(4).InfoS("Route is already exists", "Service IP", route.DestinationSubnet.String(),
+				"Gateway", route.GatewayAddress.String(), "RouteMetric", route.RouteMetric)
+			return nil
+		}
+		// Remove the existing route if gateway or metric is not as expected.
+		if err := c.nr.RemoveNetRoute(existingRoute.LinkIndex, existingRoute.DestinationSubnet, existingRoute.GatewayAddress); err != nil {
+			klog.ErrorS(err, "Failed to delete existing route entry",
+				"destination", existingRoute.DestinationSubnet.String(),
+				"gateway", existingRoute.GatewayAddress.String())
+			return err
+		}
+	}
+
+	// A virtual IP is used to avoid too many ARP responders in OVS flows.
+	// routes:
+	// 1. Virtual IP -> antrea-gw0
+	// 2. SVC IP -> Virtual IP
+	util.NewNetRouteWithMetric(route.LinkIndex, &globalVirtualGWIPNet, gwIP, metric)
+	util.NewNetRouteWithMetric(route.LinkIndex, &svcIPNet, GlobalVirtualGWIP, metric)
+
+	// Remove the Service route on host by kube-proxy.
+	// TODO: When kube-proxy is not used completely, remove the code below.
+	if err := util.RemoveInterfaceAddress("vEthernet (HNS Internal NIC)", svcIP); err != nil {
+		// We need to clean up routes just added if failure here.
+		c.nr.RemoveNetRoute(route.LinkIndex, &globalVirtualGWIPNet, gwIP)
+		c.nr.RemoveNetRoute(route.LinkIndex, &svcIPNet, GlobalVirtualGWIP)
+		return err
+	}
+
+	c.hostRoutes.Store(svcIP.String(), route)
+	klog.V(2).InfoS("Route is added", "Service IP", svcIP.String(), "Gateway IP", gwIP.String())
+	return nil
+}
+
+// replaceNetRoute adds the expected route by force.
+func (c *Client) replaceNetRoute(linkIndex int, dstIPNet *net.IPNet, gwIP net.IP, metric uint16) error {
+	// TODO: IPv6. Windows supports IPv4 only now.
+	if c.nodeConfig.GatewayConfig.IPv4.Equal(gwIP) {
+		c.nr.RemoveNetRoute(linkIndex, dstIPNet, net.ParseIP("0.0.0.0"))
+	} else {
+		c.nr.RemoveNetRoute(linkIndex, dstIPNet, gwIP)
+	}
+
+	util.NewNetRouteWithMetric(linkIndex, dstIPNet, gwIP, metric)
+	return nil
+}
+
+func (c *Client) DeleteServiceRoutes(svcIP net.IP) error {
+	obj, found := c.hostRoutes.Load(svcIP.String())
+	if !found {
+		klog.V(2).InfoS("Service route does not exist", "Destination IP", svcIP.String())
+		return nil
+	}
+
+	rt := obj.(*netroute.Route)
+	if err := c.nr.RemoveNetRoute(rt.LinkIndex, rt.DestinationSubnet, rt.GatewayAddress); err != nil {
+		return err
+	}
+	c.hostRoutes.Delete(svcIP.String())
+	klog.V(2).InfoS("Deleted Service route from host gateway", "Destination IP", svcIP.String())
 	return nil
 }
 
@@ -207,12 +296,12 @@ func (c *Client) listRoutes() (map[string]*netroute.Route, error) {
 		}
 		// Windows adds an active route entry for the local broadcast address automatically when a new IP address
 		// is configured on the interface. This route entry should be ignored in the list.
-		if rt.DestinationSubnet.IP.Equal(util.GetLocalBroadcastIP(rt.DestinationSubnet)) {
+		if !rt.GatewayAddress.Equal(GlobalVirtualGWIP) && rt.DestinationSubnet.IP.Equal(util.GetLocalBroadcastIP(rt.DestinationSubnet)) {
 			continue
 		}
-		// Skip Service corresponding routes. These route entries are added by kube-proxy. If these route entries
-		// are removed in Reconcile, the host can't access the Service.
-		if c.serviceCIDR.Contains(rt.DestinationSubnet.IP) {
+		// If the GatewayAddress equals GlobalVirtualGWIP, the route is for ClusterIP Service from host. Otherwise, the
+		// route is added by kube-proxy, which is needed to access the Service.
+		if !rt.GatewayAddress.Equal(GlobalVirtualGWIP) && c.serviceCIDR.Contains(rt.DestinationSubnet.IP) {
 			continue
 		}
 		rtMap[rt.DestinationSubnet.String()] = &rt

@@ -968,6 +968,17 @@ func (data *TestData) createNginxPodOnNode(name string, nodeName string) error {
 	}, false, nil)
 }
 
+// createHostNetworkNginxPodOnNode creates a hostNetwork Pod compared with createNginxPodOnNode.
+func (data *TestData) createHostNetworkNginxPodOnNode(name string, nodeName string) error {
+	return data.createPodOnNode(name, nodeName, nginxImage, []string{}, nil, nil, []corev1.ContainerPort{
+		{
+			Name:          "http",
+			ContainerPort: 80,
+			Protocol:      corev1.ProtocolTCP,
+		},
+	}, true, nil)
+}
+
 // createNginxPod creates a Pod in the test namespace with a single nginx container.
 func (data *TestData) createNginxPod(name, nodeName string) error {
 	return data.createNginxPodOnNode(name, nodeName)
