@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 
 	"github.com/rakelkar/gonetsh/netroute"
@@ -34,6 +35,8 @@ import (
 const (
 	inboundFirewallRuleName  = "Antrea: accept packets from local Pods"
 	outboundFirewallRuleName = "Antrea: accept packets to local Pods"
+
+	metricNormal = uint16(50)
 )
 
 type Client struct {
@@ -107,12 +110,12 @@ func (c *Client) Reconcile(podCIDRs []string) error {
 
 // AddRoutes adds routes to the provided podCIDR.
 // It overrides the routes if they already exist, without error.
-func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peerGwIP net.IP) error {
+func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peerGwIP net.IP, isSvc bool) error {
 	obj, found := c.hostRoutes.Load(podCIDR.String())
 	route := &netroute.Route{
 		DestinationSubnet: podCIDR,
 	}
-	if c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
+	if isSvc || c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
 		route.LinkIndex = c.nodeConfig.GatewayConfig.LinkIndex
 		route.GatewayAddress = peerGwIP
 	} else if c.networkConfig.TrafficEncapMode.NeedsDirectRoutingToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
@@ -141,8 +144,20 @@ func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peer
 		return nil
 	}
 
-	if err := c.nr.NewNetRoute(route.LinkIndex, route.DestinationSubnet, route.GatewayAddress); err != nil {
-		return err
+	if isSvc {
+		if err := util.NewNetRouteWithMetric(c.nodeConfig.GatewayConfig.LinkIndex, podCIDR, peerGwIP, metricNormal); err != nil &&
+			!strings.Contains(err.Error(), "The object already exists") {
+			return err
+		}
+		// Remove the Service route on host by kube-proxy.
+		// TODO: When kube-proxy is not used completely, remove the code below.
+		if err := util.RemoveInterfaceAddress("vEthernet (HNS Internal NIC)", podCIDR.IP); err != nil {
+			return err
+		}
+	} else {
+		if err := c.nr.NewNetRoute(route.LinkIndex, route.DestinationSubnet, route.GatewayAddress); err != nil {
+			return err
+		}
 	}
 
 	c.hostRoutes.Store(podCIDR.String(), route)

@@ -18,6 +18,7 @@ package proxy
 import (
 	"net"
 
+	"antrea.io/antrea/pkg/agent/config"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 )
 
@@ -25,8 +26,8 @@ import (
 // The rules for traffic from local Pod to LoadBalancer Service are the same with rules for Cluster Service.
 // For the LoadBalancer Service traffic from outside, specific rules are install to forward the packets
 // to the host network to let kube-proxy handle the traffic.
-func (p *proxier) installLoadBalancerServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error {
-	if err := p.ofClient.InstallServiceFlows(groupID, svcIP, svcPort, protocol, affinityTimeout); err != nil {
+func (p *proxier) installLoadBalancerServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, gwConfig *config.GatewayConfig, affinityTimeout uint16) error {
+	if err := p.ofClient.InstallServiceFlows(groupID, svcIP, svcPort, protocol, gwConfig, affinityTimeout); err != nil {
 		return err
 	}
 	if err := p.ofClient.InstallLoadBalancerServiceFromOutsideFlows(svcIP, svcPort, protocol); err != nil {
@@ -43,4 +44,22 @@ func (p *proxier) uninstallLoadBalancerServiceFlows(svcIP net.IP, svcPort uint16
 		return err
 	}
 	return nil
+}
+
+func (p *proxier) addClusterIPServiceRoutes(podCIDR *net.IPNet, peerNodeName string, peerNodeIP net.IP, gwConfig *config.GatewayConfig) error {
+	if gwConfig.IPv4 != nil {
+		if err := p.routeClient.AddRoutes(podCIDR, peerNodeName, peerNodeIP, gwConfig.IPv4, true); err != nil {
+			return err
+		}
+	}
+	if gwConfig.IPv6 != nil {
+		if err := p.routeClient.AddRoutes(podCIDR, peerNodeName, peerNodeIP, gwConfig.IPv6, true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *proxier) deleteClusterIPServiceRoutes(podCIDR *net.IPNet) error {
+	return p.routeClient.DeleteRoutes(podCIDR)
 }

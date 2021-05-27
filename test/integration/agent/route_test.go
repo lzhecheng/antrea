@@ -355,7 +355,7 @@ func TestAddAndDeleteRoutes(t *testing.T) {
 
 		_, peerCIDR, _ := net.ParseCIDR(tc.peerCIDR)
 		nhCIDRIP := ip.NextIP(peerCIDR.IP)
-		assert.NoError(t, routeClient.AddRoutes(peerCIDR, tc.nodeName, tc.peerIP, nhCIDRIP), "adding routes failed")
+		assert.NoError(t, routeClient.AddRoutes(peerCIDR, tc.nodeName, tc.peerIP, nhCIDRIP, false), "adding routes failed")
 
 		expRouteStr := ""
 		if tc.uplink != nil {
@@ -418,7 +418,7 @@ func TestSyncRoutes(t *testing.T) {
 
 		_, peerCIDR, _ := net.ParseCIDR(tc.peerCIDR)
 		nhCIDRIP := ip.NextIP(peerCIDR.IP)
-		assert.NoError(t, routeClient.AddRoutes(peerCIDR, tc.nodeName, tc.peerIP, nhCIDRIP), "adding routes failed")
+		assert.NoError(t, routeClient.AddRoutes(peerCIDR, tc.nodeName, tc.peerIP, nhCIDRIP, false), "adding routes failed")
 
 		listCmd := fmt.Sprintf("ip route show table 0 exact %s", peerCIDR)
 		expOutput, err := exec.Command("bash", "-c", listCmd).Output()
@@ -509,7 +509,7 @@ func TestReconcile(t *testing.T) {
 		for _, route := range tc.addedRoutes {
 			_, peerNet, _ := net.ParseCIDR(route.peerCIDR)
 			peerGwIP := ip.NextIP(peerNet.IP)
-			assert.NoError(t, routeClient.AddRoutes(peerNet, tc.nodeName, route.peerIP, peerGwIP), "adding routes failed")
+			assert.NoError(t, routeClient.AddRoutes(peerNet, tc.nodeName, route.peerIP, peerGwIP, false), "adding routes failed")
 		}
 
 		assert.NoError(t, routeClient.Reconcile(tc.desiredPeerCIDRs), "reconcile failed")
@@ -627,7 +627,7 @@ func TestIPv6RoutesAndNeighbors(t *testing.T) {
 	for _, tc := range tcs {
 		_, peerCIDR, _ := net.ParseCIDR(tc.peerCIDR)
 		nhCIDRIP := ip.NextIP(peerCIDR.IP)
-		assert.NoError(t, routeClient.AddRoutes(peerCIDR, tc.nodeName, localPeerIP, nhCIDRIP), "adding routes failed")
+		assert.NoError(t, routeClient.AddRoutes(peerCIDR, tc.nodeName, localPeerIP, nhCIDRIP, false), "adding routes failed")
 
 		link := tc.uplink
 		nhIP := nhCIDRIP

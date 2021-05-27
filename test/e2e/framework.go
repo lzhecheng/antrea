@@ -63,6 +63,7 @@ const (
 	antreaNamespace            string = "kube-system"
 	flowAggregatorNamespace    string = "flow-aggregator"
 	antreaConfigVolume         string = "antrea-config"
+	antreaWindowsConfigVolume  string = "antrea-windows-config"
 	flowAggregatorConfigVolume string = "flow-aggregator-config"
 	antreaDaemonSet            string = "antrea-agent"
 	antreaWindowsDaemonSet     string = "antrea-agent-windows"
@@ -1616,6 +1617,18 @@ func (data *TestData) GetEncapMode() (config.TrafficEncapModeType, error) {
 	return config.TrafficEncapModeEncap, nil
 }
 
+func (data *TestData) GetAntreaProxyStatus() (bool, error) {
+	configMap, err := data.GetAntreaWindowsConfigMap(antreaNamespace)
+	if err != nil {
+		return false, fmt.Errorf("failed to get Antrea ConfigMap: %v", err)
+	}
+	agentConf, _ := configMap.Data["antrea-agent.conf"]
+	if !strings.Contains(agentConf, "#  AntreaProxy: false") && strings.Contains(agentConf, "  AntreaProxy: false") {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (data *TestData) getFeatures(confName string, antreaNamespace string) (featuregate.FeatureGate, error) {
 	featureGate := features.DefaultMutableFeatureGate.DeepCopy()
 	cfgMap, err := data.GetAntreaConfigMap(antreaNamespace)
@@ -1666,6 +1679,28 @@ func (data *TestData) GetAntreaConfigMap(antreaNamespace string) (*corev1.Config
 	configMap, err := data.clientset.CoreV1().ConfigMaps(antreaNamespace).Get(context.TODO(), configMapName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ConfigMap %s: %v", configMapName, err)
+	}
+	return configMap, nil
+}
+
+func (data *TestData) GetAntreaWindowsConfigMap(antreaNamespace string) (*corev1.ConfigMap, error) {
+	ds, err := data.clientset.AppsV1().DaemonSets(antreaNamespace).Get(context.TODO(), antreaWindowsDaemonSet, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve Antrea Windows Agent DaemonSet: %v", err)
+	}
+	var cmName string
+	for _, volume := range ds.Spec.Template.Spec.Volumes {
+		if volume.ConfigMap != nil && volume.Name == antreaWindowsConfigVolume {
+			cmName = volume.ConfigMap.Name
+			break
+		}
+	}
+	if len(cmName) == 0 {
+		return nil, fmt.Errorf("failed to locate %s ConfigMap volume", antreaWindowsConfigVolume)
+	}
+	configMap, err := data.clientset.CoreV1().ConfigMaps(antreaNamespace).Get(context.TODO(), cmName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ConfigMap %s: %v", cmName, err)
 	}
 	return configMap, nil
 }

@@ -32,9 +32,11 @@ import (
 	"k8s.io/klog/v2"
 	utilnet "k8s.io/utils/net"
 
+	antreaconfig "antrea.io/antrea/pkg/agent/config"
 	"antrea.io/antrea/pkg/agent/openflow"
 	"antrea.io/antrea/pkg/agent/proxy/metrics"
 	"antrea.io/antrea/pkg/agent/proxy/types"
+	"antrea.io/antrea/pkg/agent/route"
 	"antrea.io/antrea/pkg/features"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 	k8sproxy "antrea.io/antrea/third_party/proxy"
@@ -102,8 +104,11 @@ type proxier struct {
 	runner              *k8sproxy.BoundedFrequencyRunner
 	stopChan            <-chan struct{}
 	ofClient            openflow.Client
+	routeClient         route.Interface
 	isIPv6              bool
 	enableEndpointSlice bool
+	hostname            string
+	gwConfig            *antreaconfig.GatewayConfig
 }
 
 func endpointKey(endpoint k8sproxy.Endpoint, protocol binding.Protocol) string {
@@ -360,7 +365,7 @@ func (p *proxier) installServices() {
 					continue
 				}
 			}
-			if err := p.ofClient.InstallServiceFlows(groupID, svcInfo.ClusterIP(), uint16(svcInfo.Port()), svcInfo.OFProtocol, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
+			if err := p.ofClient.InstallServiceFlows(groupID, svcInfo.ClusterIP(), uint16(svcInfo.Port()), svcInfo.OFProtocol, p.gwConfig, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
 				klog.Errorf("Error when installing Service flows: %v", err)
 				continue
 			}
@@ -387,9 +392,23 @@ func (p *proxier) installServices() {
 			}
 			for _, ingress := range toAdd {
 				if ingress != "" {
-					if err := p.installLoadBalancerServiceFlows(groupID, net.ParseIP(ingress), uint16(svcInfo.Port()), svcInfo.OFProtocol, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
+					if err := p.installLoadBalancerServiceFlows(groupID, net.ParseIP(ingress), uint16(svcInfo.Port()), svcInfo.OFProtocol, p.gwConfig, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
 						klog.Errorf("Error when installing LoadBalancer Service flows: %v", err)
 						continue
+					}
+				}
+			}
+
+			// Update route on the host for Cluster IP Service.
+			if svcInfo.ClusterIP() != nil {
+				svcIPNet := net.IPNet{IP: svcInfo.ClusterIP(), Mask: net.CIDRMask(32, 32)}
+				if needRemoval {
+					if err := p.deleteClusterIPServiceRoutes(&svcIPNet); err != nil {
+						klog.ErrorS(err, "Failed to delete route for ClusterIP Service", "Service IPNet", svcIPNet.String())
+					}
+				} else {
+					if err := p.addClusterIPServiceRoutes(&svcIPNet, p.hostname, nil, p.gwConfig); err != nil {
+						klog.ErrorS(err, "Failed to add route for ClusterIP Service", "Service IPNet", svcIPNet.String())
 					}
 				}
 			}
@@ -614,8 +633,10 @@ func (p *proxier) GetServiceFlowKeys(serviceName, namespace string) ([]string, [
 
 func NewProxier(
 	hostname string,
+	gwConfig *antreaconfig.GatewayConfig,
 	informerFactory informers.SharedInformerFactory,
 	ofClient openflow.Client,
+	routeClient route.Interface,
 	isIPv6 bool) *proxier {
 	recorder := record.NewBroadcaster().NewRecorder(
 		runtime.NewScheme(),
@@ -646,7 +667,10 @@ func NewProxier(
 		oversizeServiceSet:       sets.NewString(),
 		groupCounter:             types.NewGroupCounter(),
 		ofClient:                 ofClient,
+		routeClient:              routeClient,
 		isIPv6:                   isIPv6,
+		hostname:                 hostname,
+		gwConfig:                 gwConfig,
 	}
 	p.serviceConfig.RegisterEventHandler(p)
 	p.endpointsConfig.RegisterEventHandler(p)
@@ -692,13 +716,14 @@ func (p *metaProxierWrapper) GetServiceByIP(serviceStr string) (k8sproxy.Service
 }
 
 func NewDualStackProxier(
-	hostname string, informerFactory informers.SharedInformerFactory, ofClient openflow.Client) *metaProxierWrapper {
+	hostname string, gwConfig *antreaconfig.GatewayConfig, informerFactory informers.SharedInformerFactory,
+	ofClient openflow.Client, routeClient route.Interface) *metaProxierWrapper {
 
 	// Create an ipv4 instance of the single-stack proxier
-	ipv4Proxier := NewProxier(hostname, informerFactory, ofClient, false)
+	ipv4Proxier := NewProxier(hostname, gwConfig, informerFactory, ofClient, routeClient, false)
 
 	// Create an ipv6 instance of the single-stack proxier
-	ipv6Proxier := NewProxier(hostname, informerFactory, ofClient, true)
+	ipv6Proxier := NewProxier(hostname, gwConfig, informerFactory, ofClient, routeClient, true)
 
 	// Create a meta-proxier that dispatch calls between the two
 	// single-stack proxier instances.

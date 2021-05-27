@@ -108,7 +108,7 @@ type Client interface {
 	// action to maintain the LB decision.
 	// The group with the groupID must be installed before, otherwise the
 	// installation will fail.
-	InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error
+	InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, gwConfig *config.GatewayConfig, affinityTimeout uint16) error
 	// UninstallServiceFlows removes flows installed by InstallServiceFlows.
 	UninstallServiceFlows(svcIP net.IP, svcPort uint16, protocol binding.Protocol) error
 	// InstallLoadBalancerServiceFromOutsideFlows installs flows for LoadBalancer Service traffic from outside node.
@@ -536,18 +536,6 @@ func (c *client) UninstallEndpointFlows(protocol binding.Protocol, endpoint prox
 	}
 	cacheKey := generateEndpointFlowCacheKey(endpoint.IP(), port, protocol)
 	return c.deleteFlows(c.serviceFlowCache, cacheKey)
-}
-
-func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error {
-	c.replayMutex.RLock()
-	defer c.replayMutex.RUnlock()
-	var flows []binding.Flow
-	flows = append(flows, c.serviceLBFlow(groupID, svcIP, svcPort, protocol, affinityTimeout != 0))
-	if affinityTimeout != 0 {
-		flows = append(flows, c.serviceLearnFlow(groupID, svcIP, svcPort, protocol, affinityTimeout))
-	}
-	cacheKey := generateServicePortFlowCacheKey(svcIP, svcPort, protocol)
-	return c.addFlows(c.serviceFlowCache, cacheKey, flows)
 }
 
 func (c *client) UninstallServiceFlows(svcIP net.IP, svcPort uint16, protocol binding.Protocol) error {

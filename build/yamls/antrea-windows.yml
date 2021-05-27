@@ -96,6 +96,10 @@ data:
     # hybrid:            noEncap if source and destination Nodes are on the same subnet, otherwise encap.
     #
     #trafficEncapMode: encap
+
+    # Provide the address of Kubernetes apiserver, to override any value provided in kubeconfig or InClusterConfig.
+    # Defaults to "". It must be a host string, a host:port pair, or a URL to the base of the apiserver.
+    #kubeAPIServerOverride: ""
   antrea-cni.conflist: |
     {
         "cniVersion":"0.3.0",
@@ -114,7 +118,7 @@ kind: ConfigMap
 metadata:
   labels:
     app: antrea
-  name: antrea-windows-config-g5hmmkbh55
+  name: antrea-windows-config-cfhkdck5c9
   namespace: kube-system
 ---
 apiVersion: apps/v1
@@ -202,7 +206,7 @@ spec:
         operator: Exists
       volumes:
       - configMap:
-          name: antrea-windows-config-g5hmmkbh55
+          name: antrea-windows-config-cfhkdck5c9
         name: antrea-windows-config
       - configMap:
           defaultMode: 420

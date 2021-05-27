@@ -16,10 +16,13 @@ package e2e
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 // TestClusterIPHostAccess tests traffic from host to ClusterIP Service.
@@ -41,9 +44,46 @@ func TestClusterIPHostAccess(t *testing.T) {
 
 	var linNode, winNode string
 	linNode = node
+	t.Logf("Picked Linux Node: %s", linNode)
 	if len(clusterInfo.windowsNodes) != 0 {
 		idx := clusterInfo.windowsNodes[0]
 		winNode = clusterInfo.nodes[idx].name
+		t.Logf("Picked Windows Node: %s", winNode)
+
+		antreaProxy, err := data.GetAntreaProxyStatus()
+		if err != nil {
+			t.Errorf("Failed to get antrea-proxy is enabled or not")
+		}
+		if antreaProxy {
+			getGWCmd := fmt.Sprintf("powershell \"Get-NetIPAddress -InterfaceAlias antrea-gw0 -AddressFamily IPv4 | Select-Object -Property IPAddress | Format-Table -HideTableHeaders\"")
+			getGWRc, getGWStdout, getGWStderr, err := RunCommandOnNode(winNode, getGWCmd)
+			if getGWRc != 0 || err != nil {
+				t.Fatalf("Error when running command '%s' on Node '%s', rc: %d, stdout: %s, stderr: %s, error: %v",
+					getGWCmd, winNode, getGWRc, getGWStdout, getGWStderr, err)
+			}
+			var gwIP, printStdout string
+			if err := wait.PollImmediate(defaultInterval, defaultTimeout, func() (added bool, err error) {
+				printCmd := fmt.Sprintf("powershell \"route print | grep %s\"", svc.Spec.ClusterIP)
+				printRc, printStdout, printStderr, err := RunCommandOnNode(winNode, printCmd)
+				if printRc != 0 || err != nil {
+					printErr := fmt.Errorf("error when running command '%s' on Node '%s', rc: %d, stdout: %s, stderr: %s, error: %v",
+						printCmd, winNode, printRc, printStdout, printStderr, err)
+					return false, printErr
+				}
+				gwIP = strings.TrimSpace(getGWStdout)
+				r := regexp.MustCompile(fmt.Sprintf("%s +255.255.255.255 +On-link +%s +65", svc.Spec.ClusterIP, gwIP))
+				if !r.MatchString(printStdout) {
+					return false, nil
+				}
+				return true, nil
+			}); err == wait.ErrWaitTimeout {
+				t.Fatalf("With antrea-proxy enabled, antrea-gw '%s', host route is not as expected, stdout: %s", gwIP, printStdout)
+			} else if err != nil {
+				t.Fatalf("With antrea-proxy enabled, antrea-gw '%s', host route is not as expected: %v", gwIP, err)
+			} else {
+				t.Logf("Expected host route is found")
+			}
+		}
 	}
 
 	curlSvc := func(node string) {

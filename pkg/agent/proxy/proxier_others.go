@@ -18,14 +18,15 @@ package proxy
 import (
 	"net"
 
+	"antrea.io/antrea/pkg/agent/config"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 )
 
 // installLoadBalancerServiceFlows install OpenFlow entries for LoadBalancer Service.
 // The rules for traffic from local Pod to LoadBalancer Service are same with rules for Cluster Service.
 // For the LoadBalancer Service traffic from outside, kube-proxy will handle it.
-func (p *proxier) installLoadBalancerServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error {
-	if err := p.ofClient.InstallServiceFlows(groupID, svcIP, svcPort, protocol, affinityTimeout); err != nil {
+func (p *proxier) installLoadBalancerServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, gwConfig *config.GatewayConfig, affinityTimeout uint16) error {
+	if err := p.ofClient.InstallServiceFlows(groupID, svcIP, svcPort, protocol, gwConfig, affinityTimeout); err != nil {
 		return err
 	}
 	return nil
@@ -35,5 +36,15 @@ func (p *proxier) uninstallLoadBalancerServiceFlows(svcIP net.IP, svcPort uint16
 	if err := p.ofClient.UninstallServiceFlows(svcIP, svcPort, protocol); err != nil {
 		return err
 	}
+	return nil
+}
+
+// addClusterIPServiceRoutes is only used for Windows Cluster IP Service.
+func (p *proxier) addClusterIPServiceRoutes(podCIDR *net.IPNet, peerNodeName string, peerNodeIP net.IP, gwConfig *config.GatewayConfig) error {
+	return nil
+}
+
+// deleteClusterIPServiceRoutes is only used for Windows Cluster IP Service.
+func (p *proxier) deleteClusterIPServiceRoutes(podCIDR *net.IPNet) error {
 	return nil
 }

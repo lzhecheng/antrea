@@ -233,6 +233,8 @@ function deliver_antrea_windows {
     export_govc_env_var
 
     cp -f build/yamls/*.yml $WORKDIR
+    K8S_EP_ADDR=$(kubectl get endpoints kubernetes --no-headers=true | awk '{print $2}')
+    sed -i "s|#kubeAPIServerOverride: \"\"|kubeAPIServerOverride: \"${K8S_EP_ADDR}\"|g" "${WORKDIR}/antrea-windows.yml"
     docker save -o antrea-ubuntu.tar projects.registry.vmware.com/antrea/antrea-ubuntu:latest
 
     echo "===== Deliver Antrea to Linux nodes ====="

@@ -498,7 +498,7 @@ func (c *Controller) addNodeRoute(nodeName string, node *corev1.Node) error {
 
 	var peerGatewayIPs []net.IP
 	for peerPodCIDR, peerGatewayIP := range peerConfig {
-		if err := c.routeClient.AddRoutes(peerPodCIDR, nodeName, peerNodeIP, peerGatewayIP); err != nil {
+		if err := c.routeClient.AddRoutes(peerPodCIDR, nodeName, peerNodeIP, peerGatewayIP, false); err != nil {
 			return err
 		}
 		peerGatewayIPs = append(peerGatewayIPs, peerGatewayIP)
