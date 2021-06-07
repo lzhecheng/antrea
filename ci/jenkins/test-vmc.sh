@@ -375,10 +375,8 @@ function deliver_antrea {
         docker save -o flow-aggregator.tar projects.registry.vmware.com/antrea/flow-aggregator:${DOCKER_IMG_VERSION}
     fi
 
-
-    kubectl get nodes -o wide --no-headers=true | awk -v role="$CONTROL_PLANE_NODE_ROLE" '$3 == role {print $6}' | while read control_plane_ip; do
-        ${SCP_WITH_ANTREA_CI_KEY} $GIT_CHECKOUT_DIR/build/yamls/*.yml capv@${control_plane_ip}:~
-    done
+    control_plane_ip="$(kubectl get nodes -o wide --no-headers=true | awk -v role="$CONTROL_PLANE_NODE_ROLE" '$3 == role {print $6}')"
+    ${SCP_WITH_ANTREA_CI_KEY} $GIT_CHECKOUT_DIR/build/yamls/*.yml capv@${control_plane_ip}:~
 
     IPs=($(kubectl get nodes -o wide --no-headers=true | awk '{print $6}' | xargs))
     for i in "${!IPs[@]}"
@@ -451,16 +449,21 @@ function run_e2e {
     cp -f $GIT_CHECKOUT_DIR/jenkins/out/kubeconfig $GIT_CHECKOUT_DIR/test/e2e/infra/vagrant/playbook/kube/config
 
     echo "=== Generate ssh-config ==="
-    cp -f $GIT_CHECKOUT_DIR/ci/jenkins/ssh-config $GIT_CHECKOUT_DIR/test/e2e/infra/vagrant/ssh-config
-    control_plane_name="$(kubectl get nodes -o wide --no-headers=true | awk -v role="$CONTROL_PLANE_NODE_ROLE" '$3 == role {print $1}')"
-    control_plane_ip="$(kubectl get nodes -o wide --no-headers=true | awk -v role="$CONTROL_PLANE_NODE_ROLE" '$3 == role {print $6}')"
-    echo "=== Control-plane Node ip: ${control_plane_ip} ==="
-    sed -i "s/CONTROLPLANENODEIP/${control_plane_ip}/g" $GIT_CHECKOUT_DIR/test/e2e/infra/vagrant/ssh-config
+    SSH_CONFIG_DST="${GIT_CHECKOUT_DIR}/test/e2e/infra/vagrant/ssh-config"
+    kubectl get nodes -o wide --no-headers=true | awk '{print $1}' | while read sshconfig_nodename; do
+        echo "Generating ssh-config for Node ${sshconfig_nodename}"
+        sshconfig_nodeip="$(kubectl get node "${sshconfig_nodename}" -o jsonpath='{.status.addresses[0].address}')"
+        cp "${GIT_CHECKOUT_DIR}/ci/jenkins/ssh-config" "${SSH_CONFIG_DST}.new"
+        sed -i "s/SSHCONFIGNODEIP/${sshconfig_nodeip}/g" "${SSH_CONFIG_DST}.new"
+        sed -i "s/SSHCONFIGNODENAME/${sshconfig_nodename}/g" "${SSH_CONFIG_DST}.new"
+        echo "    IdentityFile ${GIT_CHECKOUT_DIR}/jenkins/key/antrea-ci-key" >> "${SSH_CONFIG_DST}.new"
+        cat "${SSH_CONFIG_DST}.new" >> "${SSH_CONFIG_DST}"
+    done
+
     echo "=== Move kubeconfig to control-plane Node ==="
+    control_plane_ip="$(kubectl get nodes -o wide --no-headers=true | awk -v role="$CONTROL_PLANE_NODE_ROLE" '$3 == role {print $6}')"
     ${SSH_WITH_ANTREA_CI_KEY} -n capv@${control_plane_ip} "if [ ! -d ".kube" ]; then mkdir .kube; fi"
     ${SCP_WITH_ANTREA_CI_KEY} $GIT_CHECKOUT_DIR/jenkins/out/kubeconfig capv@${control_plane_ip}:~/.kube/config
-    sed -i "s/CONTROLPLANENODE/${control_plane_name}/g" $GIT_CHECKOUT_DIR/test/e2e/infra/vagrant/ssh-config
-    echo "    IdentityFile ${GIT_CHECKOUT_DIR}/jenkins/key/antrea-ci-key" >> $GIT_CHECKOUT_DIR/test/e2e/infra/vagrant/ssh-config
 
     set +e
     mkdir -p ${GIT_CHECKOUT_DIR}/antrea-test-logs
