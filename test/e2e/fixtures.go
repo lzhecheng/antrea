@@ -38,6 +38,12 @@ func skipIfProviderIs(tb testing.TB, name string, reason string) {
 	}
 }
 
+func skipIfProviderIsNot(tb testing.TB, name string, reason string) {
+	if testOptions.providerName != name {
+		tb.Skipf("Skipping test if provider is not '%s': %s", name, reason)
+	}
+}
+
 func skipIfNumNodesLessThan(tb testing.TB, required int) {
 	if clusterInfo.numNodes < required {
 		tb.Skipf("Skipping test as it requires %d different Nodes but cluster only has %d", required, clusterInfo.numNodes)
