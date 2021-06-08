@@ -24,7 +24,6 @@ import (
 
 // TestClusterIPHostAccess tests traffic from host to Cluster IP Service.
 func TestClusterIPHostAccess(t *testing.T) {
-	skipIfProviderIs(t, "kind", "TestClusterIPHostAccessOnKind tests on Kind.")
 	// TODO: Support for dual-stack and IPv6-only clusters
 	skipIfIPv6Cluster(t)
 
