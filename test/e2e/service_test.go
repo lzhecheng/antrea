@@ -24,29 +24,20 @@ import (
 
 // TestClusterIPHostAccess tests traffic from host to Cluster IP Service.
 func TestClusterIPHostAccess(t *testing.T) {
-	skipIfProviderIs(t, "kind", "Skipping Kind provider for now.")
+	skipIfProviderIs(t, "kind", "TestClusterIPHostAccessOnKind tests on Kind.")
+	// TODO: Support for dual-stack and IPv6-only clusters
+	skipIfIPv6Cluster(t)
 
 	data, err := setupTest(t)
 	if err != nil {
 		t.Fatalf("Error when setting up test: %v", err)
 	}
 	defer teardownTest(t, data)
-	skipIfNumNodesLessThan(t, 2)
-	// TODO: Support for dual-stack and IPv6-only clusters
-	skipIfIPv6Cluster(t)
 
-	ipv4Protocol := corev1.IPv4Protocol
-	epNode := nodeName(1)
-	nginx := "nginx"
-	require.NoError(t, data.createNginxPod(nginx, epNode))
-	_, err = data.podWaitForIPs(defaultTimeout, nginx, testNamespace)
-	defer data.deletePodAndWait(defaultTimeout, nginx)
-	require.NoError(t, err)
-	require.NoError(t, data.podWaitForRunning(defaultTimeout, nginx, testNamespace))
-	svc, err := data.createNginxClusterIPService(nginx, false, &ipv4Protocol)
-	defer data.deleteServiceAndWait(defaultTimeout, nginx)
-	require.NoError(t, err)
-	t.Log("Nginx Service is ready")
+	svcName := "nginx"
+	svc, cleanup := data.createClusterIPServiceAllInOne(t, svcName, controlPlaneNodeName())
+	defer cleanup()
+	t.Logf("%s Service is ready", svcName)
 
 	var winNode string
 	if len(clusterInfo.windowsNodes) != 0 {
@@ -64,9 +55,61 @@ func TestClusterIPHostAccess(t *testing.T) {
 		}
 	}
 	t.Logf("Try to curl Cluster IP Service from a Linux host")
-	curlSvc(clusterInfo.controlPlaneNodeName)
+	curlSvc(controlPlaneNodeName())
 	if winNode != "" {
 		t.Logf("Try to curl Cluster IP Service from a Windows host")
 		curlSvc(winNode)
 	}
+}
+
+// TestClusterIPHostAccessOnKind tests traffic from a HostNetwork Pod to Cluster IP Service when provider is Kind.
+func TestClusterIPHostAccessOnKind(t *testing.T) {
+	skipIfProviderIsNot(t, "kind", "TestClusterIPHostAccess tests on providers other than Kind.")
+	// TODO: Support for dual-stack and IPv6-only clusters
+	skipIfIPv6Cluster(t)
+
+	data, err := setupTest(t)
+	if err != nil {
+		t.Fatalf("Error when setting up test: %v", err)
+	}
+	defer teardownTest(t, data)
+
+	svcName := "nginx"
+	node := controlPlaneNodeName()
+	svc, cleanup := data.createClusterIPServiceAllInOne(t, svcName, node)
+	defer cleanup()
+	t.Logf("%s Service is ready", svcName)
+
+	client := "client"
+	require.NoError(t, data.createHostNetworkAgnhostPodOnNode(client, node))
+	defer data.deletePod(testNamespace, client)
+	_, err = data.podWaitForIPs(defaultTimeout, client, testNamespace)
+	require.NoError(t, err)
+	require.NoError(t, data.podWaitForRunning(defaultTimeout, client, testNamespace))
+
+	cmd := []string{"curl", fmt.Sprintf("%s:80", svc.Spec.ClusterIP)}
+	stdout, stderr, err := data.runCommandFromPod(testNamespace, client, agnhostContainerName, cmd)
+	if err != nil {
+		t.Errorf("Error when curling from a HostNetwork Pod to Cluster IP Service, stdout: %s, stderr: %s: %v",
+			stdout, stderr, err)
+	} else {
+		t.Logf("curl from a HostNetwork Pod on Node '%s' succeeded\n", node)
+	}
+}
+
+func (data *TestData) createClusterIPServiceAllInOne(t *testing.T, name string, node string) (*corev1.Service, func()) {
+	ipv4Protocol := corev1.IPv4Protocol
+	require.NoError(t, data.createNginxPod(name, node))
+	_, err := data.podWaitForIPs(defaultTimeout, name, testNamespace)
+	require.NoError(t, err)
+	require.NoError(t, data.podWaitForRunning(defaultTimeout, name, testNamespace))
+	svc, err := data.createNginxClusterIPService(name, false, &ipv4Protocol)
+	require.NoError(t, err)
+
+	cleanup := func() {
+		data.deletePodAndWait(defaultTimeout, name)
+		data.deleteServiceAndWait(defaultTimeout, name)
+	}
+
+	return svc, cleanup
 }
