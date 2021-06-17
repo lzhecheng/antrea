@@ -1373,6 +1373,13 @@ func (data *TestData) createNginxClusterIPService(name string, affinity bool, ip
 	return data.createService(name, 80, 80, map[string]string{"app": "nginx"}, affinity, corev1.ServiceTypeClusterIP, ipFamily)
 }
 
+func (data *TestData) createAgnhostService(name string, affinity bool, ipFamily *corev1.IPFamily, svcType corev1.ServiceType) (*corev1.Service, error) {
+	if name == "" {
+		name = "agnhost"
+	}
+	return data.createService(name, 80, 80, map[string]string{"app": "agnhost"}, affinity, svcType, ipFamily)
+}
+
 func (data *TestData) createNginxLoadBalancerService(affinity bool, ingressIPs []string, ipFamily *corev1.IPFamily) (*corev1.Service, error) {
 	svc, err := data.createService(nginxLBService, 80, 80, map[string]string{"app": "nginx"}, affinity, corev1.ServiceTypeLoadBalancer, ipFamily)
 	if err != nil {
@@ -1963,6 +1970,17 @@ func (data *TestData) copyNodeFiles(nodeName string, fileName string, covDir str
 func (data *TestData) createAgnhostPodOnNode(name string, nodeName string) error {
 	sleepDuration := 3600 // seconds
 	return data.createPodOnNode(name, nodeName, agnhostImage, []string{"sleep", strconv.Itoa(sleepDuration)}, nil, nil, nil, false, nil)
+}
+
+func (data *TestData) createAgnhostServicePodOnNode(name string, nodeName string) error {
+	args := []string{"netexec", "--http-port=80", "--udp-port=80"}
+	return data.createPodOnNode(name, nodeName, agnhostImage, []string{}, args, nil, []corev1.ContainerPort{
+		{
+			Name:          "http",
+			ContainerPort: 80,
+			Protocol:      corev1.ProtocolTCP,
+		},
+	}, false, nil)
 }
 
 func (data *TestData) createDaemonSet(name string, ns string, ctrName string, image string, cmd []string, args []string) (*appsv1.DaemonSet, func() error, error) {
