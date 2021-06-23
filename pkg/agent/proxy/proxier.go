@@ -365,7 +365,7 @@ func (p *proxier) installServices() {
 					continue
 				}
 			}
-			if err := p.ofClient.InstallServiceFlows(groupID, svcInfo.ClusterIP(), uint16(svcInfo.Port()), svcInfo.OFProtocol, p.gwConfig, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
+			if err := p.ofClient.InstallServiceFlows(groupID, svcInfo.ClusterIP(), uint16(svcInfo.Port()), svcInfo.OFProtocol, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
 				klog.Errorf("Error when installing Service flows: %v", err)
 				continue
 			}
@@ -392,7 +392,7 @@ func (p *proxier) installServices() {
 			}
 			for _, ingress := range toAdd {
 				if ingress != "" {
-					if err := p.installLoadBalancerServiceFlows(groupID, net.ParseIP(ingress), uint16(svcInfo.Port()), svcInfo.OFProtocol, p.gwConfig, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
+					if err := p.installLoadBalancerServiceFlows(groupID, net.ParseIP(ingress), uint16(svcInfo.Port()), svcInfo.OFProtocol, uint16(svcInfo.StickyMaxAgeSeconds())); err != nil {
 						klog.Errorf("Error when installing LoadBalancer Service flows: %v", err)
 						continue
 					}
@@ -401,14 +401,14 @@ func (p *proxier) installServices() {
 
 			// Update route on the host for Cluster IP Service.
 			if svcInfo.ClusterIP() != nil {
-				svcIPNet := net.IPNet{IP: svcInfo.ClusterIP(), Mask: net.CIDRMask(32, 32)}
+				svcIP := svcInfo.ClusterIP()
 				if needRemoval {
-					if err := p.deleteClusterIPServiceRoutes(&svcIPNet); err != nil {
-						klog.ErrorS(err, "Failed to delete route for ClusterIP Service", "Service IPNet", svcIPNet.String())
+					if err := p.deleteClusterIPServiceRoutes(svcIP); err != nil {
+						klog.ErrorS(err, "Failed to delete route for ClusterIP Service", "Service IP", svcIP.String())
 					}
 				} else {
-					if err := p.addClusterIPServiceRoutes(&svcIPNet, p.hostname, nil, p.gwConfig); err != nil {
-						klog.ErrorS(err, "Failed to add route for ClusterIP Service", "Service IPNet", svcIPNet.String())
+					if err := p.addClusterIPServiceRoutes(svcIP, p.gwConfig); err != nil {
+						klog.ErrorS(err, "Failed to add route for ClusterIP Service", "Service IP", svcIP.String())
 					}
 				}
 			}

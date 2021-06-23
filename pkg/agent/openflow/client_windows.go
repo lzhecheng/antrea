@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"net"
 
-	"antrea.io/antrea/pkg/agent/config"
 	"antrea.io/antrea/pkg/agent/openflow/cookie"
+	"antrea.io/antrea/pkg/agent/route"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 )
+
+var globalVirtualSVCMAC, _ = net.ParseMAC("aa:bb:cc:dd:ee:fe")
 
 func (c *client) InstallBridgeUplinkFlows() error {
 	flows := c.hostBridgeUplinkFlows(*c.nodeConfig.PodIPv4CIDR, cookie.Default)
@@ -51,7 +53,7 @@ func (c *client) UninstallLoadBalancerServiceFromOutsideFlows(svcIP net.IP, svcP
 	return c.deleteFlows(c.serviceFlowCache, cacheKey)
 }
 
-func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, gwConfig *config.GatewayConfig, affinityTimeout uint16) error {
+func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error {
 	c.replayMutex.RLock()
 	defer c.replayMutex.RUnlock()
 	var flows []binding.Flow
@@ -60,12 +62,13 @@ func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, 
 		flows = append(flows, c.serviceLearnFlow(groupID, svcIP, svcPort, protocol, affinityTimeout))
 	}
 
-	flows = append(flows, c.arpResponderClusterIPFlows(svcIP, gwConfig.MAC, cookie.Service)...)
+	gwConfig := c.nodeConfig.GatewayConfig
+	flows = append(flows, c.arpResponderFlow(route.GlobalVirtualGWIP, globalVirtualSVCMAC, priorityHigh, cookie.Service))
 	if gwConfig.IPv4 != nil {
-		flows = append(flows, c.clusterIPHostNetworkFlows(gwConfig.IPv4, c.nodeConfig.NodeIPAddr.IP, cookie.Service)...)
+		flows = append(flows, c.clusterIPHostNetworkFlows(gwConfig.IPv4, cookie.Service)...)
 	}
 	if gwConfig.IPv6 != nil {
-		flows = append(flows, c.clusterIPHostNetworkFlows(gwConfig.IPv6, c.nodeConfig.NodeIPAddr.IP, cookie.Service)...)
+		flows = append(flows, c.clusterIPHostNetworkFlows(gwConfig.IPv6, cookie.Service)...)
 	}
 	cacheKey := generateServicePortFlowCacheKey(svcIP, svcPort, protocol)
 	return c.addFlows(c.serviceFlowCache, cacheKey, flows)

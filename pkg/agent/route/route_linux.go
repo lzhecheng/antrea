@@ -564,7 +564,7 @@ func (c *Client) listIPv6NeighborsOnGateway() (map[string]*netlink.Neigh, error)
 }
 
 // AddRoutes adds routes to a new podCIDR. It overrides the routes if they already exist.
-func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, nodeIP, nodeGwIP net.IP, isSvc bool) error {
+func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, nodeIP, nodeGwIP net.IP) error {
 	podCIDRStr := podCIDR.String()
 	ipsetName := getIPSetName(podCIDR.IP)
 	// Add this podCIDR to antreaPodIPSet so that packets to them won't be masqueraded when they leave the host.
@@ -655,6 +655,14 @@ func (c *Client) DeleteRoutes(podCIDR *net.IPNet) error {
 		}
 	}
 	return nil
+}
+
+func (c *Client) AddServiceRoutes(svcIP net.IP, gwIP net.IP) error {
+	return nil
+}
+
+func (c *Client) DeleteServiceRoutes(svcIP net.IP) error {
+	fmt.Errorf("AddServiceRoutes is not implemented on Linux")
 }
 
 // Join all words with spaces, terminate with newline and write to buf.

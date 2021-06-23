@@ -134,7 +134,7 @@ func TestControllerWithDuplicatePodCIDR(t *testing.T) {
 		// The 2nd argument is Any() because the argument is unpredictable when it uses pointer as the key of map.
 		// The argument type is map[*net.IPNet]net.IP.
 		c.ofClient.EXPECT().InstallNodeFlows("node1", gomock.Any(), nodeIP1, uint32(0), nil).Times(1)
-		c.routeClient.EXPECT().AddRoutes(podCIDR, "node1", nodeIP1, podCIDRGateway, false).Times(1)
+		c.routeClient.EXPECT().AddRoutes(podCIDR, "node1", nodeIP1, podCIDRGateway).Times(1)
 		c.processNextWorkItem()
 
 		// Since node1 is not deleted yet, routes and flows for node2 shouldn't be installed as its PodCIDR is duplicate.
@@ -151,7 +151,7 @@ func TestControllerWithDuplicatePodCIDR(t *testing.T) {
 		// The 2nd argument is Any() because the argument is unpredictable when it uses pointer as the key of map.
 		// The argument type is map[*net.IPNet]net.IP.
 		c.ofClient.EXPECT().InstallNodeFlows("node2", gomock.Any(), nodeIP2, uint32(0), nil).Times(1)
-		c.routeClient.EXPECT().AddRoutes(podCIDR, "node2", nodeIP2, podCIDRGateway, false).Times(1)
+		c.routeClient.EXPECT().AddRoutes(podCIDR, "node2", nodeIP2, podCIDRGateway).Times(1)
 		c.processNextWorkItem()
 	}()
 
@@ -215,12 +215,12 @@ func TestIPInPodSubnets(t *testing.T) {
 	// The 2nd argument is Any() because the argument is unpredictable when it uses pointer as the key of map.
 	// The argument type is map[*net.IPNet]net.IP.
 	c.ofClient.EXPECT().InstallNodeFlows("node1", gomock.Any(), nodeIP1, uint32(0), nil).Times(1)
-	c.routeClient.EXPECT().AddRoutes(podCIDR, "node1", nodeIP1, podCIDRGateway, false).Times(1)
+	c.routeClient.EXPECT().AddRoutes(podCIDR, "node1", nodeIP1, podCIDRGateway).Times(1)
 	c.processNextWorkItem()
 
 	c.clientset.CoreV1().Nodes().Create(context.TODO(), node2, metav1.CreateOptions{})
 	c.ofClient.EXPECT().InstallNodeFlows("node2", gomock.Any(), nodeIP2, uint32(0), nil).Times(1)
-	c.routeClient.EXPECT().AddRoutes(podCIDR2, "node2", nodeIP2, podCIDR2Gateway, false).Times(1)
+	c.routeClient.EXPECT().AddRoutes(podCIDR2, "node2", nodeIP2, podCIDR2Gateway).Times(1)
 	c.processNextWorkItem()
 
 	assert.Equal(t, true, c.Controller.IPInPodSubnets(net.ParseIP("1.1.1.1")))

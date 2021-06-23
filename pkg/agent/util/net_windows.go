@@ -527,9 +527,15 @@ func SetInterfaceMTU(ifaceName string, mtu int) error {
 	return InvokePSCommand(cmd)
 }
 
+// GetNetRoutes gets routes with destination subnet.
+//func GetNetRoutes(linkIndex int, dstSubnet *net.IPNet) error {
+//	cmd := fmt.Sprintf("Get-NetRoute -InterfaceIndex %d -DestinationPrefix %s -erroraction Ignore", linkIndex, dstSubnet.String())
+//	return InvokePSCommand(cmd)
+//}
+
 // NewNetRouteWithMetric adds a route with metric on host.
-func NewNetRouteWithMetric(linkIndex int, destinationSubnet *net.IPNet, gatewayAddress net.IP, metric uint16) error {
+func NewNetRouteWithMetric(linkIndex int, dstSubnet *net.IPNet, gwAddr net.IP, metric uint16) error {
 	cmd := fmt.Sprintf("New-NetRoute -InterfaceIndex %v -DestinationPrefix %v -NextHop %v -RouteMetric %d -Verbose",
-		linkIndex, destinationSubnet.String(), gatewayAddress.String(), metric)
+		linkIndex, dstSubnet.String(), gwAddr.String(), metric)
 	return InvokePSCommand(cmd)
 }

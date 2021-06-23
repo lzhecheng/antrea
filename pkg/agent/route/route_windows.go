@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/rakelkar/gonetsh/netroute"
@@ -36,7 +35,13 @@ const (
 	inboundFirewallRuleName  = "Antrea: accept packets from local Pods"
 	outboundFirewallRuleName = "Antrea: accept packets to local Pods"
 
+	metricHigh   = uint16(256)
 	metricNormal = uint16(50)
+)
+
+var (
+	GlobalVirtualGWIP    = net.ParseIP("169.254.169.253").To4()
+	globalVirtualGWIPNet = net.IPNet{IP: GlobalVirtualGWIP, Mask: net.CIDRMask(32, 32)}
 )
 
 type Client struct {
@@ -110,12 +115,12 @@ func (c *Client) Reconcile(podCIDRs []string) error {
 
 // AddRoutes adds routes to the provided podCIDR.
 // It overrides the routes if they already exist, without error.
-func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peerGwIP net.IP, isSvc bool) error {
+func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peerGwIP net.IP) error {
 	obj, found := c.hostRoutes.Load(podCIDR.String())
 	route := &netroute.Route{
 		DestinationSubnet: podCIDR,
 	}
-	if isSvc || c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
+	if c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
 		route.LinkIndex = c.nodeConfig.GatewayConfig.LinkIndex
 		route.GatewayAddress = peerGwIP
 	} else if c.networkConfig.TrafficEncapMode.NeedsDirectRoutingToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
@@ -144,20 +149,8 @@ func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peer
 		return nil
 	}
 
-	if isSvc {
-		if err := util.NewNetRouteWithMetric(c.nodeConfig.GatewayConfig.LinkIndex, podCIDR, peerGwIP, metricNormal); err != nil &&
-			!strings.Contains(err.Error(), "The object already exists") {
-			return err
-		}
-		// Remove the Service route on host by kube-proxy.
-		// TODO: When kube-proxy is not used completely, remove the code below.
-		if err := util.RemoveInterfaceAddress("vEthernet (HNS Internal NIC)", podCIDR.IP); err != nil {
-			return err
-		}
-	} else {
-		if err := c.nr.NewNetRoute(route.LinkIndex, route.DestinationSubnet, route.GatewayAddress); err != nil {
-			return err
-		}
+	if err := replaceNetRoute(c.nr, route.LinkIndex, route.DestinationSubnet, route.GatewayAddress, metricHigh); err != nil {
+		return err
 	}
 
 	c.hostRoutes.Store(podCIDR.String(), route)
@@ -180,6 +173,122 @@ func (c *Client) DeleteRoutes(podCIDR *net.IPNet) error {
 	}
 	c.hostRoutes.Delete(podCIDR.String())
 	klog.V(2).Infof("Deleted route with destination %s from host gateway", podCIDR.String())
+	return nil
+}
+
+func (c *Client) AddServiceRoutes(svcIP net.IP, gwIP net.IP) error {
+	obj, found := c.hostRoutes.Load(svcIP.String())
+	svcIPNet := net.IPNet{IP: svcIP, Mask: net.CIDRMask(32, 32)}
+	metric := metricNormal
+	route := &netroute.Route{
+		LinkIndex:         c.nodeConfig.GatewayConfig.LinkIndex,
+		DestinationSubnet: &svcIPNet,
+		GatewayAddress:    gwIP,
+		RouteMetric:       int(metric),
+	}
+
+	if found {
+		existingRoute := obj.(*netroute.Route)
+		if existingRoute.GatewayAddress.Equal(route.GatewayAddress) && existingRoute.RouteMetric == route.RouteMetric {
+			klog.V(4).Infof("Route for Service IP '%s' already exists via gateway '%s' with metric '%d'",
+				route.DestinationSubnet.String(), route.GatewayAddress.String(), route.RouteMetric)
+			return nil
+		}
+		// Remove the existing route if gateway or metric is not as expected.
+		if err := c.nr.RemoveNetRoute(existingRoute.LinkIndex, existingRoute.DestinationSubnet, existingRoute.GatewayAddress); err != nil {
+			klog.ErrorS(err, "Failed to delete existing route entry",
+				"destination", existingRoute.DestinationSubnet.String(),
+				"gateway", existingRoute.GatewayAddress.String())
+			return err
+		}
+	}
+
+	if route.GatewayAddress == nil {
+		return nil
+	}
+
+	// A virtual IP is used to avoid too many ARP responders in OVS flows.
+	// routes:
+	// 1. Virtual IP -> antrea-gw0
+	if err := replaceNetRoute(c.nr, route.LinkIndex, &globalVirtualGWIPNet, gwIP, metric); err != nil {
+		return fmt.Errorf("error when adding route to '%s' via '%s' with metric '%d': %v", globalVirtualGWIPNet.String(), gwIP.String(), metric, err)
+	}
+	// 2. SVC IP -> Virtual IP
+	if err := replaceNetRoute(c.nr, route.LinkIndex, &svcIPNet, GlobalVirtualGWIP, metric); err != nil {
+		return fmt.Errorf("error when adding route to '%s' via '%s' with metric '%d': %v", svcIPNet.String(), GlobalVirtualGWIP.String(), metric, err)
+	}
+
+	// Remove the Service route on host by kube-proxy.
+	// TODO: When kube-proxy is not used completely, remove the code below.
+	if err := util.RemoveInterfaceAddress("vEthernet (HNS Internal NIC)", svcIP); err != nil {
+		return err
+	}
+
+	c.hostRoutes.Store(svcIP.String(), route)
+	klog.V(2).Infof("Added route for Service IP `%s` via gateway '%s'", svcIP.String(), gwIP.String())
+	return nil
+}
+
+// replaceNetRoute adds the expected route by force.
+func replaceNetRoute(nr netroute.Interface, linkIndex int, dstIPNet *net.IPNet, gwIP net.IP, metric uint16) error {
+	routesAdded, err := nr.GetNetRoutes(linkIndex, dstIPNet)
+	if err != nil {
+		return fmt.Errorf("error when getting routes for '%s'", dstIPNet.String())
+	}
+	found := false
+	sameMetric := false
+	klog.Infof("lzc before routeAdded: dstIPNet: %s, gwIP: %s", dstIPNet.String(), gwIP.String())
+	for _, r := range routesAdded {
+		klog.Infof("lzc one route: dest: %s, gw: %s", r.DestinationSubnet.String(), r.GatewayAddress.String())
+		if r.GatewayAddress.Equal(gwIP) {
+			klog.Infof("lzc gwIP %s exist", gwIP.String())
+			found = true
+			if r.RouteMetric == int(metric) {
+				klog.Infof("lzc %d same metric")
+				sameMetric = true
+			}
+			break
+		}
+	}
+	klog.Infof("lzc found: %v, sameMetric: %v", found, sameMetric)
+	if found {
+		if sameMetric {
+			return nil
+		}
+		if err := nr.RemoveNetRoute(linkIndex, dstIPNet, gwIP); err != nil {
+			return err
+		}
+		klog.Infof("lzc old route is deleted %s", dstIPNet.IP.String())
+	}
+
+	routesAdded1, err := nr.GetNetRoutes(linkIndex, dstIPNet)
+	if err != nil {
+		return fmt.Errorf("error when getting routes for '%s'", dstIPNet.String())
+	}
+	for _, r1 := range routesAdded1 {
+		klog.Infof("lzc left over: IPnet %s, gwIP %s", r1.DestinationSubnet.String(), r1.GatewayAddress.String())
+	}
+
+
+	if err := nr.NewNetRoute(linkIndex, dstIPNet, gwIP); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) DeleteServiceRoutes(svcIP net.IP) error {
+	obj, found := c.hostRoutes.Load(svcIP.String())
+	if !found {
+		klog.V(2).Infof("Route with destination %s not exists", svcIP.String())
+		return nil
+	}
+
+	rt := obj.(*netroute.Route)
+	if err := c.nr.RemoveNetRoute(rt.LinkIndex, rt.DestinationSubnet, rt.GatewayAddress); err != nil {
+		return err
+	}
+	c.hostRoutes.Delete(svcIP.String())
+	klog.V(2).Infof("Deleted route with destination %s from host gateway", svcIP.String())
 	return nil
 }
 

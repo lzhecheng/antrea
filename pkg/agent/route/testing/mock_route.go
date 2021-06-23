@@ -50,17 +50,17 @@ func (m *MockInterface) EXPECT() *MockInterfaceMockRecorder {
 }
 
 // AddRoutes mocks base method
-func (m *MockInterface) AddRoutes(arg0 *net.IPNet, arg1 string, arg2, arg3 net.IP, arg4 bool) error {
+func (m *MockInterface) AddRoutes(arg0 *net.IPNet, arg1 string, arg2, arg3 net.IP) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddRoutes", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "AddRoutes", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddRoutes indicates an expected call of AddRoutes
-func (mr *MockInterfaceMockRecorder) AddRoutes(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockInterfaceMockRecorder) AddRoutes(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRoutes", reflect.TypeOf((*MockInterface)(nil).AddRoutes), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddRoutes", reflect.TypeOf((*MockInterface)(nil).AddRoutes), arg0, arg1, arg2, arg3)
 }
 
 // AddSNATRule mocks base method
@@ -75,6 +75,20 @@ func (m *MockInterface) AddSNATRule(arg0 net.IP, arg1 uint32) error {
 func (mr *MockInterfaceMockRecorder) AddSNATRule(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSNATRule", reflect.TypeOf((*MockInterface)(nil).AddSNATRule), arg0, arg1)
+}
+
+// AddServiceRoutes mocks base method
+func (m *MockInterface) AddServiceRoutes(arg0, arg1 net.IP) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddServiceRoutes", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddServiceRoutes indicates an expected call of AddServiceRoutes
+func (mr *MockInterfaceMockRecorder) AddServiceRoutes(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddServiceRoutes", reflect.TypeOf((*MockInterface)(nil).AddServiceRoutes), arg0, arg1)
 }
 
 // DeleteRoutes mocks base method
@@ -103,6 +117,20 @@ func (m *MockInterface) DeleteSNATRule(arg0 uint32) error {
 func (mr *MockInterfaceMockRecorder) DeleteSNATRule(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSNATRule", reflect.TypeOf((*MockInterface)(nil).DeleteSNATRule), arg0)
+}
+
+// DeleteServiceRoutes mocks base method
+func (m *MockInterface) DeleteServiceRoutes(arg0 net.IP) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteServiceRoutes", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteServiceRoutes indicates an expected call of DeleteServiceRoutes
+func (mr *MockInterfaceMockRecorder) DeleteServiceRoutes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteServiceRoutes", reflect.TypeOf((*MockInterface)(nil).DeleteServiceRoutes), arg0)
 }
 
 // Initialize mocks base method

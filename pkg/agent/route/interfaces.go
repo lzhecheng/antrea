@@ -32,11 +32,17 @@ type Interface interface {
 
 	// AddRoutes should add routes to the provided podCIDR.
 	// It should override the routes if they already exist, without error.
-	AddRoutes(podCIDR *net.IPNet, peerNodeName string, peerNodeIP, peerGwIP net.IP, isSvc bool) error
+	AddRoutes(podCIDR *net.IPNet, peerNodeName string, peerNodeIP, peerGwIP net.IP) error
 
 	// DeleteRoutes should delete routes to the provided podCIDR.
 	// It should do nothing if the routes don't exist, without error.
 	DeleteRoutes(podCIDR *net.IPNet) error
+
+	// AddServiceRoutes adds route for a Service IP.
+	AddServiceRoutes(svcIP net.IP, gwIP net.IP) error
+
+	// DeleteServiceRoutes deletes route for a Service IP.
+	DeleteServiceRoutes(svcIP net.IP) error
 
 	// MigrateRoutesToGw should move routes from device linkname to local gateway.
 	MigrateRoutesToGw(linkName string) error

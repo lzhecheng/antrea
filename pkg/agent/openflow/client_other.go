@@ -20,7 +20,6 @@ package openflow
 import (
 	"net"
 
-	"antrea.io/antrea/pkg/agent/config"
 	binding "antrea.io/antrea/pkg/ovs/openflow"
 )
 
@@ -36,7 +35,7 @@ func (c *client) UninstallLoadBalancerServiceFromOutsideFlows(svcIP net.IP, svcP
 	return nil
 }
 
-func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, gwConfig *config.GatewayConfig, affinityTimeout uint16) error {
+func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error {
 	c.replayMutex.RLock()
 	defer c.replayMutex.RUnlock()
 	var flows []binding.Flow

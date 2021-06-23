@@ -1236,19 +1236,18 @@ func (c *client) l3FwdFlowToRemoteViaGW(
 		Done()
 }
 
-// arpResponderFlow generates the ARP responder flow entry that replies request comes from local gateway for peer
-// gateway MAC.
-func (c *client) arpResponderFlow(peerGatewayIP net.IP, category cookie.Category) binding.Flow {
-	return c.pipeline[arpResponderTable].BuildFlow(priorityNormal).MatchProtocol(binding.ProtocolARP).
+// arpResponderFlow generates the ARP responder flow entry that replies request for provided IP and MAC.
+func (c *client) arpResponderFlow(ip net.IP, mac net.HardwareAddr, priority uint16, category cookie.Category) binding.Flow {
+	return c.pipeline[arpResponderTable].BuildFlow(priority).MatchProtocol(binding.ProtocolARP).
 		MatchARPOp(arpOpRequest).
-		MatchARPTpa(peerGatewayIP).
+		MatchARPTpa(ip).
 		Action().Move(binding.NxmFieldSrcMAC, binding.NxmFieldDstMAC).
-		Action().SetSrcMAC(globalVirtualMAC).
+		Action().SetSrcMAC(mac).
 		Action().LoadARPOperation(arpOpReply).
 		Action().Move(binding.NxmFieldARPSha, binding.NxmFieldARPTha).
-		Action().SetARPSha(globalVirtualMAC).
+		Action().SetARPSha(mac).
 		Action().Move(binding.NxmFieldARPSpa, binding.NxmFieldARPTpa).
-		Action().SetARPSpa(peerGatewayIP).
+		Action().SetARPSpa(ip).
 		Action().OutputInPort().
 		Cookie(c.cookieAllocator.Request(category).Raw()).
 		Done()

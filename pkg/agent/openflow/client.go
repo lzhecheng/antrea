@@ -108,7 +108,7 @@ type Client interface {
 	// action to maintain the LB decision.
 	// The group with the groupID must be installed before, otherwise the
 	// installation will fail.
-	InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, gwConfig *config.GatewayConfig, affinityTimeout uint16) error
+	InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, svcPort uint16, protocol binding.Protocol, affinityTimeout uint16) error
 	// UninstallServiceFlows removes flows installed by InstallServiceFlows.
 	UninstallServiceFlows(svcIP net.IP, svcPort uint16, protocol binding.Protocol) error
 	// InstallLoadBalancerServiceFromOutsideFlows installs flows for LoadBalancer Service traffic from outside node.
@@ -388,7 +388,7 @@ func (c *client) InstallNodeFlows(hostname string,
 		if peerGatewayIP.To4() != nil {
 			// Since broadcast is not supported in IPv6, ARP should happen only with IPv4 address, and ARP responder flows
 			// only work for IPv4 addresses.
-			flows = append(flows, c.arpResponderFlow(peerGatewayIP, cookie.Node))
+			flows = append(flows, c.arpResponderFlow(peerGatewayIP, globalVirtualMAC, priorityNormal, cookie.Node))
 		}
 		if c.encapMode.NeedsEncapToPeer(tunnelPeerIP, c.nodeConfig.NodeIPAddr) {
 			// tunnelPeerIP is the Node Internal Address. In a dual-stack setup, whether this address is an IPv4 address or an

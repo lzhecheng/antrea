@@ -312,23 +312,8 @@ func (c *client) l3FwdFlowToRemoteViaRouting(localGatewayMAC net.HardwareAddr, r
 	return []binding.Flow{c.l3FwdFlowToRemoteViaGW(localGatewayMAC, *peerPodCIDR, category)}
 }
 
-func (c *client) arpResponderClusterIPFlows(svcIP net.IP, gwMAC net.HardwareAddr, category cookie.Category) (flows []binding.Flow) {
-	flows = append(flows, c.pipeline[arpResponderTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolARP).
-		MatchARPTpa(svcIP).MatchARPOp(arpOpRequest).
-		Action().LoadARPOperation(arpOpReply).
-		Action().Move(binding.NxmFieldSrcMAC, binding.NxmFieldDstMAC).
-		Action().SetSrcMAC(gwMAC).
-		Action().Move(binding.NxmFieldARPSha, binding.NxmFieldARPTha).
-		Action().SetARPSha(gwMAC).
-		Action().Move(binding.NxmFieldARPSpa, binding.NxmFieldARPTpa).
-		Action().SetARPSpa(svcIP).
-		Action().OutputInPort().
-		Cookie(c.cookieAllocator.Request(category).Raw()).
-		Done())
-	return flows
-}
-
-func (c *client) clusterIPHostNetworkFlows(gwIP net.IP, nodeIP net.IP, category cookie.Category) (flows []binding.Flow) {
+// clusterIPHostNetworkFlows does SNAT for hostnetwork ClusterIP Service case on Windows platform.
+func (c *client) clusterIPHostNetworkFlows(gwIP net.IP, category cookie.Category) (flows []binding.Flow) {
 	flows = append(flows,
 		c.pipeline[l3ForwardingTable].BuildFlow(priorityLow).MatchProtocol(binding.ProtocolIP).
 			MatchSrcIP(gwIP).MatchCTMark(ServiceCTMark, nil).
@@ -337,21 +322,11 @@ func (c *client) clusterIPHostNetworkFlows(gwIP net.IP, nodeIP net.IP, category 
 			Action().ResubmitToTable(l2ForwardingCalcTable).
 			Cookie(c.cookieAllocator.Request(category).Raw()).
 			Done(),
-		c.pipeline[conntrackCommitTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
-			MatchSrcIP(gwIP).MatchCTMark(ServiceCTMark, nil).
-			MatchCTStateNew(true).MatchCTStateTrk(true).
-			MatchRegRange(int(marksReg), snatDefaultMark, snatMarkRange).
-			Action().CT(true, L2ForwardingOutTable, ctZoneSNAT).SNAT(
-			&binding.IPRange{StartIP: nodeIP, EndIP: nodeIP},
-			nil).
-			LoadToMark(snatCTMark).CTDone().
-			Cookie(c.cookieAllocator.Request(category).Raw()).
-			Done(),
-		c.pipeline[conntrackCommitTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
-			MatchSrcIP(gwIP).MatchCTMark(ServiceCTMark, nil).
-			MatchCTStateNew(false).MatchCTStateTrk(true).
-			MatchRegRange(int(marksReg), snatDefaultMark, snatMarkRange).
-			Action().CT(false, L2ForwardingOutTable, ctZoneSNAT).NAT().CTDone().
+		c.pipeline[l2ForwardingCalcTable].BuildFlow(priorityNormal).MatchProtocol(binding.ProtocolIP).
+			MatchDstMAC(globalVirtualSVCMAC).
+			Action().LoadRegRange(int(PortCacheReg), 2, ofPortRegRange).
+			Action().LoadRegRange(int(marksReg), 1, ofPortMarkRange).
+			Action().ResubmitToTable(IngressMetricTable).
 			Cookie(c.cookieAllocator.Request(category).Raw()).
 			Done(),
 		c.pipeline[L2ForwardingOutTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
