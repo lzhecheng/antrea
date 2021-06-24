@@ -534,8 +534,8 @@ func SetInterfaceMTU(ifaceName string, mtu int) error {
 //}
 
 // NewNetRouteWithMetric adds a route with metric on host.
-func NewNetRouteWithMetric(linkIndex int, dstSubnet *net.IPNet, gwAddr net.IP, metric uint16) error {
-	cmd := fmt.Sprintf("New-NetRoute -InterfaceIndex %v -DestinationPrefix %v -NextHop %v -RouteMetric %d -Verbose",
-		linkIndex, dstSubnet.String(), gwAddr.String(), metric)
-	return InvokePSCommand(cmd)
-}
+//func NewNetRouteWithMetric(linkIndex int, dstSubnet *net.IPNet, gwAddr net.IP, metric uint16) error {
+//	cmd := fmt.Sprintf("New-NetRoute -InterfaceIndex %v -DestinationPrefix %v -NextHop %v -RouteMetric %d -Verbose",
+//		linkIndex, dstSubnet.String(), gwAddr.String(), metric)
+//	return InvokePSCommand(cmd)
+//}

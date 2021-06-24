@@ -34,9 +34,6 @@ import (
 const (
 	inboundFirewallRuleName  = "Antrea: accept packets from local Pods"
 	outboundFirewallRuleName = "Antrea: accept packets to local Pods"
-
-	metricHigh   = uint16(256)
-	metricNormal = uint16(50)
 )
 
 var (
@@ -149,7 +146,7 @@ func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peer
 		return nil
 	}
 
-	if err := replaceNetRoute(c.nr, route.LinkIndex, route.DestinationSubnet, route.GatewayAddress, metricHigh); err != nil {
+	if err := c.replaceNetRoute(route.LinkIndex, route.DestinationSubnet, route.GatewayAddress); err != nil {
 		return err
 	}
 
@@ -179,12 +176,10 @@ func (c *Client) DeleteRoutes(podCIDR *net.IPNet) error {
 func (c *Client) AddServiceRoutes(svcIP net.IP, gwIP net.IP) error {
 	obj, found := c.hostRoutes.Load(svcIP.String())
 	svcIPNet := net.IPNet{IP: svcIP, Mask: net.CIDRMask(32, 32)}
-	metric := metricNormal
 	route := &netroute.Route{
 		LinkIndex:         c.nodeConfig.GatewayConfig.LinkIndex,
 		DestinationSubnet: &svcIPNet,
 		GatewayAddress:    gwIP,
-		RouteMetric:       int(metric),
 	}
 
 	if found {
@@ -210,12 +205,12 @@ func (c *Client) AddServiceRoutes(svcIP net.IP, gwIP net.IP) error {
 	// A virtual IP is used to avoid too many ARP responders in OVS flows.
 	// routes:
 	// 1. Virtual IP -> antrea-gw0
-	if err := replaceNetRoute(c.nr, route.LinkIndex, &globalVirtualGWIPNet, gwIP, metric); err != nil {
-		return fmt.Errorf("error when adding route to '%s' via '%s' with metric '%d': %v", globalVirtualGWIPNet.String(), gwIP.String(), metric, err)
+	if err := c.replaceNetRoute(route.LinkIndex, &globalVirtualGWIPNet, gwIP); err != nil {
+		return fmt.Errorf("error when adding route to '%s' via '%s': %v", globalVirtualGWIPNet.String(), gwIP.String(), err)
 	}
 	// 2. SVC IP -> Virtual IP
-	if err := replaceNetRoute(c.nr, route.LinkIndex, &svcIPNet, GlobalVirtualGWIP, metric); err != nil {
-		return fmt.Errorf("error when adding route to '%s' via '%s' with metric '%d': %v", svcIPNet.String(), GlobalVirtualGWIP.String(), metric, err)
+	if err := c.replaceNetRoute(route.LinkIndex, &svcIPNet, GlobalVirtualGWIP); err != nil {
+		return fmt.Errorf("error when adding route to '%s' via '%s': %v", svcIPNet.String(), GlobalVirtualGWIP.String(), err)
 	}
 
 	// Remove the Service route on host by kube-proxy.
@@ -230,38 +225,31 @@ func (c *Client) AddServiceRoutes(svcIP net.IP, gwIP net.IP) error {
 }
 
 // replaceNetRoute adds the expected route by force.
-func replaceNetRoute(nr netroute.Interface, linkIndex int, dstIPNet *net.IPNet, gwIP net.IP, metric uint16) error {
-	routesAdded, err := nr.GetNetRoutes(linkIndex, dstIPNet)
+func (c *Client) replaceNetRoute(linkIndex int, dstIPNet *net.IPNet, gwIP net.IP) error {
+	routesAdded, err := c.nr.GetNetRoutes(linkIndex, dstIPNet)
 	if err != nil {
 		return fmt.Errorf("error when getting routes for '%s'", dstIPNet.String())
 	}
 	found := false
-	sameMetric := false
 	klog.Infof("lzc before routeAdded: dstIPNet: %s, gwIP: %s", dstIPNet.String(), gwIP.String())
 	for _, r := range routesAdded {
 		klog.Infof("lzc one route: dest: %s, gw: %s", r.DestinationSubnet.String(), r.GatewayAddress.String())
-		if r.GatewayAddress.Equal(gwIP) {
+		// TODO: consider IPv6
+		if r.GatewayAddress.Equal(gwIP) || c.nodeConfig.GatewayConfig.IPv4.Equal(gwIP) && r.GatewayAddress.Equal(net.ParseIP("0.0.0.0")) {
 			klog.Infof("lzc gwIP %s exist", gwIP.String())
 			found = true
-			if r.RouteMetric == int(metric) {
-				klog.Infof("lzc %d same metric")
-				sameMetric = true
-			}
 			break
 		}
 	}
-	klog.Infof("lzc found: %v, sameMetric: %v", found, sameMetric)
+	klog.Infof("lzc found: %v", found)
 	if found {
-		if sameMetric {
-			return nil
-		}
-		if err := nr.RemoveNetRoute(linkIndex, dstIPNet, gwIP); err != nil {
+		if err := c.nr.RemoveNetRoute(linkIndex, dstIPNet, gwIP); err != nil {
 			return err
 		}
 		klog.Infof("lzc old route is deleted %s", dstIPNet.IP.String())
 	}
 
-	routesAdded1, err := nr.GetNetRoutes(linkIndex, dstIPNet)
+	routesAdded1, err := c.nr.GetNetRoutes(linkIndex, dstIPNet)
 	if err != nil {
 		return fmt.Errorf("error when getting routes for '%s'", dstIPNet.String())
 	}
@@ -270,7 +258,7 @@ func replaceNetRoute(nr netroute.Interface, linkIndex int, dstIPNet *net.IPNet, 
 	}
 
 
-	if err := nr.NewNetRoute(linkIndex, dstIPNet, gwIP); err != nil {
+	if err := c.nr.NewNetRoute(linkIndex, dstIPNet, gwIP); err != nil {
 		return err
 	}
 	return nil
