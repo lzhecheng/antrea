@@ -550,17 +550,6 @@ func (c *client) defaultFlows() (flows []binding.Flow) {
 	return flows
 }
 
-// tunnelClassifierFlow generates the flow to mark traffic comes from the tunnelOFPort.
-func (c *client) tunnelClassifierFlow(tunnelOFPort uint32, category cookie.Category) binding.Flow {
-	return c.pipeline[ClassifierTable].BuildFlow(priorityNormal).
-		MatchInPort(tunnelOFPort).
-		Action().LoadRegRange(int(marksReg), markTrafficFromTunnel, binding.Range{0, 15}).
-		Action().LoadRegRange(int(marksReg), macRewriteMark, macRewriteMarkRange).
-		Action().GotoTable(conntrackTable).
-		Cookie(c.cookieAllocator.Request(category).Raw()).
-		Done()
-}
-
 // gatewayClassifierFlow generates the flow to mark traffic comes from the gatewayOFPort.
 func (c *client) gatewayClassifierFlow(category cookie.Category) binding.Flow {
 	classifierTable := c.pipeline[ClassifierTable]

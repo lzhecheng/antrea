@@ -713,14 +713,16 @@ func (c *client) Initialize(roundInfo types.RoundInfo, nodeConfig *config.NodeCo
 
 func (c *client) InstallExternalFlows() error {
 	nodeIP := c.nodeConfig.NodeIPAddr.IP
+	localGatewayIPv4 := c.nodeConfig.GatewayConfig.IPv4
+	localGatewayIPv6 := c.nodeConfig.GatewayConfig.IPv6
 	localGatewayMAC := c.nodeConfig.GatewayConfig.MAC
 
 	var flows []binding.Flow
 	if c.nodeConfig.PodIPv4CIDR != nil {
-		flows = c.externalFlows(nodeIP, *c.nodeConfig.PodIPv4CIDR, localGatewayMAC)
+		flows = c.externalFlows(nodeIP, *c.nodeConfig.PodIPv4CIDR, localGatewayIPv4, localGatewayMAC)
 	}
 	if c.nodeConfig.PodIPv6CIDR != nil {
-		flows = append(flows, c.externalFlows(nodeIP, *c.nodeConfig.PodIPv6CIDR, localGatewayMAC)...)
+		flows = append(flows, c.externalFlows(nodeIP, *c.nodeConfig.PodIPv6CIDR, localGatewayIPv6, localGatewayMAC)...)
 	}
 
 	if err := c.ofEntryOperations.AddAll(flows); err != nil {

@@ -61,7 +61,7 @@ func (c *client) InstallServiceFlows(groupID binding.GroupIDType, svcIP net.IP, 
 	if affinityTimeout != 0 {
 		flows = append(flows, c.serviceLearnFlow(groupID, svcIP, svcPort, protocol, affinityTimeout))
 	}
-
+	flows = append(flows, c.clusterIPServiceIPBindingFlow(svcIP, cookie.SNAT))
 	flows = append(flows, c.arpResponderFlow(route.GlobalVirtualGWIP, globalVirtualSVCMAC, priorityHigh, cookie.Service))
 	cacheKey := generateServicePortFlowCacheKey(svcIP, svcPort, protocol)
 	return c.addFlows(c.serviceFlowCache, cacheKey, flows)

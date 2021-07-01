@@ -201,7 +201,7 @@ func (c *client) snatImplementationFlows(nodeIP net.IP, category cookie.Category
 }
 
 // serviceSNATFlows installs flows to allow a Windows host to access a ClusterIP Service.
-func (c *client) serviceSNATFlows(nodeIP net.IP, localGatewayMAC net.HardwareAddr, category cookie.Category) []binding.Flow {
+func (c *client) serviceSNATFlows(nodeIP net.IP, localGatewayIP net.IP, localGatewayMAC net.HardwareAddr, category cookie.Category) []binding.Flow {
 	var flows []binding.Flow
 	if c.enableProxy {
 		flows = append(flows, []binding.Flow{
@@ -218,12 +218,31 @@ func (c *client) serviceSNATFlows(nodeIP net.IP, localGatewayMAC net.HardwareAdd
 				MatchCTMark(snatCTMark, nil).
 				MatchCTStateRpl(true).
 				MatchCTStateTrk(true).
+				//MatchInPort(config.HostGatewayOFPort).
 				Action().SetDstMAC(localGatewayMAC).
 				Action().ResubmitToTable(conntrackTable).
 				Done(),
 			c.pipeline[unSNATTable].BuildFlow(priorityLow).
 				MatchRegRange(int(marksReg), markTrafficFromUplink, trafficFromRegRange).
+				MatchInPort(config.HostGatewayOFPort).
 				Action().Output(config.BridgeOFPort).
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+			c.pipeline[unSNATTable].BuildFlow(priorityNormal).
+				MatchProtocol(binding.ProtocolIP).
+				MatchInPort(config.DefaultTunOFPort).
+				MatchDstIP(localGatewayIP).
+				Action().CT(false, conntrackTable, ctZoneSNAT).NAT().CTDone().
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
+			// Add a general unSNATTable flow to resubmit to table 30.
+			c.pipeline[conntrackCommitTable].BuildFlow(priorityHigh).
+				MatchProtocol(binding.ProtocolIP).
+				MatchRegRange(int(marksReg), 0x1, binding.Range{20, 20}).
+				MatchInPort(config.HostGatewayOFPort).
+				Action().CT(true, L2ForwardingOutTable, ctZoneSNAT).
+				SNAT(&binding.IPRange{StartIP: localGatewayIP, EndIP: localGatewayIP}, nil).
+				CTDone().
 				Cookie(c.cookieAllocator.Request(category).Raw()).
 				Done(),
 			// Flows below are for hostnetwork ClusterIP Service which needs SNAT and the SNAT mark is set.
@@ -254,6 +273,13 @@ func (c *client) serviceSNATFlows(nodeIP net.IP, localGatewayMAC net.HardwareAdd
 				Action().CT(false, L2ForwardingOutTable, ctZoneSNAT).NAT().CTDone().
 				Cookie(c.cookieAllocator.Request(category).Raw()).
 				Done(),
+			c.pipeline[conntrackCommitTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
+				MatchRegRange(int(marksReg), 0x100000, binding.Range{0, 20}).
+				MatchInPort(config.HostGatewayOFPort).
+				Action().CT(true, L2ForwardingOutTable, ctZoneSNAT).
+				SNAT(&binding.IPRange{StartIP: localGatewayIP, EndIP: localGatewayIP}, nil).CTDone().
+				Cookie(c.cookieAllocator.Request(category).Raw()).
+				Done(),
 			// The request packet is received from antrea-gw0 and will be sent back to antrea-gw0 for routing, so
 			// "in_port" is used as output which is required by OVS.
 			c.pipeline[L2ForwardingOutTable].BuildFlow(priorityHigh).MatchProtocol(binding.ProtocolIP).
@@ -267,11 +293,11 @@ func (c *client) serviceSNATFlows(nodeIP net.IP, localGatewayMAC net.HardwareAdd
 }
 
 // externalFlows returns the flows needed to enable SNAT for external traffic.
-func (c *client) externalFlows(nodeIP net.IP, localSubnet net.IPNet, localGatewayMAC net.HardwareAddr) []binding.Flow {
+func (c *client) externalFlows(nodeIP net.IP, localSubnet net.IPNet, localGatewayIP net.IP, localGatewayMAC net.HardwareAddr) []binding.Flow {
 	flows := c.snatCommonFlows(nodeIP, localSubnet, localGatewayMAC, cookie.SNAT)
 	flows = append(flows, c.uplinkSNATFlows(localSubnet, cookie.SNAT)...)
 	flows = append(flows, c.snatImplementationFlows(nodeIP, cookie.SNAT)...)
-	flows = append(flows, c.serviceSNATFlows(nodeIP, localGatewayMAC, cookie.SNAT)...)
+	flows = append(flows, c.serviceSNATFlows(nodeIP, localGatewayIP, localGatewayMAC, cookie.SNAT)...)
 	return flows
 }
 
@@ -386,4 +412,26 @@ func (c *client) l3FwdFlowToRemoteViaRouting(localGatewayMAC net.HardwareAddr, r
 		return flows
 	}
 	return []binding.Flow{c.l3FwdFlowToRemoteViaGW(localGatewayMAC, *peerPodCIDR, category)}
+}
+
+// tunnelClassifierFlow generates the flow to mark traffic comes from the tunnelOFPort.
+func (c *client) tunnelClassifierFlow(tunnelOFPort uint32, category cookie.Category) binding.Flow {
+	return c.pipeline[ClassifierTable].BuildFlow(priorityNormal).
+		MatchInPort(tunnelOFPort).
+		Action().LoadRegRange(int(marksReg), markTrafficFromTunnel, binding.Range{0, 15}).
+		Action().LoadRegRange(int(marksReg), macRewriteMark, macRewriteMarkRange).
+		Action().GotoTable(unSNATTable).
+		Cookie(c.cookieAllocator.Request(category).Raw()).
+		Done()
+}
+
+func (c *client) clusterIPServiceIPBindingFlow(svcIP net.IP, category cookie.Category) binding.Flow {
+	return c.pipeline[serviceHairpinTable].BuildFlow(priorityLow).MatchProtocol(binding.ProtocolIP).
+		MatchInPort(config.HostGatewayOFPort).
+		MatchDstMAC(globalVirtualSVCMAC).
+		MatchDstIP(svcIP).
+		Action().LoadRegRange(int(marksReg), 1, binding.Range{20, 20}).
+		Action().ResubmitToTable(conntrackTable).
+		Cookie(c.cookieAllocator.Request(category).Raw()).
+		Done()
 }

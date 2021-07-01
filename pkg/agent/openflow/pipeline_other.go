@@ -40,3 +40,14 @@ func (c *client) l3FwdFlowToRemoteViaRouting(localGatewayMAC net.HardwareAddr, r
 	category cookie.Category, peerIP net.IP, peerPodCIDR *net.IPNet) []binding.Flow {
 	return []binding.Flow{c.l3FwdFlowToRemoteViaGW(localGatewayMAC, *peerPodCIDR, category)}
 }
+
+// tunnelClassifierFlow generates the flow to mark traffic comes from the tunnelOFPort.
+func (c *client) tunnelClassifierFlow(tunnelOFPort uint32, category cookie.Category) binding.Flow {
+	return c.pipeline[ClassifierTable].BuildFlow(priorityNormal).
+		MatchInPort(tunnelOFPort).
+		Action().LoadRegRange(int(marksReg), markTrafficFromTunnel, binding.Range{0, 15}).
+		Action().LoadRegRange(int(marksReg), macRewriteMark, macRewriteMarkRange).
+		Action().GotoTable(conntrackTable).
+		Cookie(c.cookieAllocator.Request(category).Raw()).
+		Done()
+}
