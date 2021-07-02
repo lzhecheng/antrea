@@ -201,7 +201,11 @@ func (data *TestData) testPodConnectivityDifferentNodes(t *testing.T) {
 		numPods = maxPods
 	}
 	podInfos, deletePods := createPodsOnDifferentNodes(t, data)
-	defer deletePods()
+	defer func() {
+		if err := deletePods(); err != nil {
+			t.Errorf("Failed to delete Pods in time: %v", err)
+		}
+	}()
 
 	if len(podInfos) > maxPods {
 		podInfos = podInfos[:maxPods]
@@ -287,7 +291,11 @@ func TestPodConnectivityAfterAntreaRestart(t *testing.T) {
 
 	numPods := 2 // can be increased
 	podInfos, deletePods := createPodsOnDifferentNodes(t, data)
-	defer deletePods()
+	defer func() {
+		if err := deletePods(); err != nil {
+			t.Errorf("Failed to delete Pods in time: %v", err)
+		}
+	}()
 
 	data.runPingMesh(t, podInfos[:numPods], agnhostContainerName)
 
@@ -389,8 +397,14 @@ func TestOVSFlowReplay(t *testing.T) {
 		if err := data.createBusyboxPodOnNode(podInfos[i].name, workerNode); err != nil {
 			t.Fatalf("Error when creating busybox test Pod '%s': %v", podInfos[i].name, err)
 		}
-		defer deletePodWrapper(t, data, podInfos[i].name)
 	}
+	defer func() {
+		for _, p := range podInfos {
+			if err := data.deletePodAndWait(defaultTimeout, testNamespace, p.name); err != nil {
+				t.Errorf("Error when deleting Pod '%s': %v", p.name, err)
+			}
+		}
+	}()
 
 	data.runPingMesh(t, podInfos, busyboxContainerName)
 
@@ -468,7 +482,11 @@ func TestPingLargeMTU(t *testing.T) {
 	defer teardownTest(t, data)
 
 	podInfos, deletePods := createPodsOnDifferentNodes(t, data)
-	defer deletePods()
+	defer func() {
+		if err := deletePods(); err != nil {
+			t.Errorf("Failed to delete Pods in time: %v", err)
+		}
+	}()
 	podIPs := waitForPodIPs(t, data, podInfos)
 
 	pingSize := 2000

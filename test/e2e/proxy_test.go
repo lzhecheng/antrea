@@ -69,7 +69,7 @@ func testProxyServiceSessionAffinity(ipFamily *corev1.IPFamily, ingressIPs []str
 	nginx := "nginx"
 	require.NoError(t, data.createNginxPodOnNode(nginx, nodeName))
 	nginxIP, err := data.podWaitForIPs(defaultTimeout, nginx, testNamespace)
-	defer data.deletePodAndWait(defaultTimeout, nginx)
+	defer data.deletePodAndWait(defaultTimeout, testNamespace, nginx)
 	require.NoError(t, err)
 	require.NoError(t, data.podWaitForRunning(defaultTimeout, nginx, testNamespace))
 	svc, err := data.createNginxClusterIPService("", true, ipFamily)
@@ -81,7 +81,7 @@ func testProxyServiceSessionAffinity(ipFamily *corev1.IPFamily, ingressIPs []str
 
 	busyboxPod := "busybox"
 	require.NoError(t, data.createBusyboxPodOnNode(busyboxPod, nodeName))
-	defer data.deletePodAndWait(defaultTimeout, busyboxPod)
+	defer data.deletePodAndWait(defaultTimeout, testNamespace, busyboxPod)
 	require.NoError(t, data.podWaitForRunning(defaultTimeout, busyboxPod, testNamespace))
 	stdout, stderr, err := data.runCommandFromPod(testNamespace, busyboxPod, busyboxContainerName, []string{"wget", "-O", "-", svc.Spec.ClusterIP, "-T", "1"})
 	require.NoError(t, err, fmt.Sprintf("ipFamily: %v\nstdout: %s\nstderr: %s\n", *ipFamily, stdout, stderr))
@@ -138,7 +138,7 @@ func testProxyHairpin(ipFamily *corev1.IPFamily, data *TestData, t *testing.T) {
 	busybox := "busybox"
 	nodeName := nodeName(1)
 	err := data.createPodOnNode(busybox, nodeName, busyboxImage, []string{"nc", "-lk", "-p", "80"}, nil, nil, []corev1.ContainerPort{{ContainerPort: 80, Protocol: corev1.ProtocolTCP}}, false, nil)
-	defer data.deletePodAndWait(defaultTimeout, busybox)
+	defer data.deletePodAndWait(defaultTimeout, testNamespace, busybox)
 	require.NoError(t, err)
 	require.NoError(t, data.podWaitForRunning(defaultTimeout, busybox, testNamespace))
 	svc, err := data.createService(busybox, 80, 80, map[string]string{"antrea-e2e": "busybox"}, false, corev1.ServiceTypeClusterIP, ipFamily)
@@ -204,7 +204,7 @@ func testProxyEndpointLifeCycle(ipFamily *corev1.IPFamily, data *TestData, t *te
 		require.Contains(t, tableOutput, keyword)
 	}
 
-	require.NoError(t, data.deletePodAndWait(defaultTimeout, nginx))
+	require.NoError(t, data.deletePodAndWait(defaultTimeout, testNamespace, nginx))
 
 	for tableID, keyword := range keywords {
 		tableOutput, _, err := data.runCommandFromPod(metav1.NamespaceSystem, agentName, "antrea-agent", []string{"ovs-ofctl", "dump-flows", defaultBridgeName, fmt.Sprintf("table=%d", tableID)})
@@ -238,7 +238,7 @@ func testProxyServiceLifeCycle(ipFamily *corev1.IPFamily, ingressIPs []string, d
 	nodeName := nodeName(1)
 	nginx := "nginx"
 	require.NoError(t, data.createNginxPodOnNode(nginx, nodeName))
-	defer data.deletePodAndWait(defaultTimeout, nginx)
+	defer data.deletePodAndWait(defaultTimeout, testNamespace, nginx)
 	nginxIPs, err := data.podWaitForIPs(defaultTimeout, nginx, testNamespace)
 	require.NoError(t, err)
 	var nginxIP string

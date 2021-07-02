@@ -54,7 +54,7 @@ func TestClusterIP(t *testing.T) {
 
 	testFromPod := func(podName, nodeName string, hostNetwork bool) {
 		require.NoError(t, data.createPodOnNode(podName, nodeName, busyboxImage, []string{"sleep", strconv.Itoa(3600)}, nil, nil, nil, hostNetwork, nil))
-		defer data.deletePodAndWait(defaultTimeout, podName)
+		defer data.deletePodAndWait(defaultTimeout, testNamespace, podName)
 		require.NoError(t, data.podWaitForRunning(defaultTimeout, podName, testNamespace))
 		err := data.runNetcatCommandFromTestPod(podName, svc.Spec.ClusterIP, 80)
 		require.NoError(t, err, "Pod %s should be able to connect %s, but was not able to connect", podName, net.JoinHostPort(svc.Spec.ClusterIP, fmt.Sprint(80)))
@@ -99,7 +99,7 @@ func (data *TestData) createClusterIPServiceAndBackendPods(t *testing.T, name st
 	require.NoError(t, err)
 
 	cleanup := func() {
-		data.deletePodAndWait(defaultTimeout, name)
+		data.deletePodAndWait(defaultTimeout, testNamespace, name)
 		data.deleteServiceAndWait(defaultTimeout, name)
 	}
 
@@ -129,7 +129,7 @@ func TestNodePortWindows(t *testing.T) {
 	// e2e framework, nodeName(0)/Control-plane Node is guaranteed to be a Linux one.
 	clientName := "agnhost-client"
 	require.NoError(t, data.createAgnhostPodOnNode(clientName, nodeName(0)))
-	defer data.deletePodAndWait(defaultTimeout, clientName)
+	defer data.deletePodAndWait(defaultTimeout, testNamespace, clientName)
 	_, err = data.podWaitForIPs(defaultTimeout, clientName, testNamespace)
 	require.NoError(t, err)
 
@@ -164,7 +164,7 @@ func (data *TestData) createAgnhostServiceAndBackendPods(t *testing.T, name stri
 	require.NoError(t, err)
 
 	cleanup := func() {
-		data.deletePodAndWait(defaultTimeout, name)
+		data.deletePodAndWait(defaultTimeout, testNamespace, name)
 		data.deleteServiceAndWait(defaultTimeout, name)
 	}
 

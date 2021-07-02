@@ -497,15 +497,17 @@ func (data *TestData) deleteNamespace(namespace string, timeout time.Duration) e
 		GracePeriodSeconds: &gracePeriodSeconds,
 		PropagationPolicy:  &propagationPolicy,
 	}
-	if err := data.clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions); err != nil {
+	var err error
+	if err = data.clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions); err != nil {
 		if errors.IsNotFound(err) {
 			// namespace does not exist, we return right away
 			return nil
 		}
 		return fmt.Errorf("error when deleting '%s' Namespace: %v", namespace, err)
 	}
-	err := wait.Poll(defaultInterval, timeout, func() (bool, error) {
-		if ns, err := data.clientset.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{}); err != nil {
+	var ns *corev1.Namespace
+	if err = wait.Poll(defaultInterval, timeout, func() (bool, error) {
+		if ns, err = data.clientset.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{}); err != nil {
 			if errors.IsNotFound(err) {
 				// Success
 				return true, nil
@@ -517,7 +519,14 @@ func (data *TestData) deleteNamespace(namespace string, timeout time.Duration) e
 
 		// Keep trying
 		return false, nil
-	})
+	}); err == wait.ErrWaitTimeout {
+		var conditionsStr string
+		for _, c := range ns.Status.Conditions {
+			conditionsStr += c.String() + "; "
+		}
+		return fmt.Errorf("error after deleting namespace '%s' for '%s': conditions '%s'",
+			namespace, timeout.String(), conditionsStr)
+	}
 	return err
 }
 
@@ -1007,15 +1016,15 @@ func (data *TestData) deletePod(namespace, name string) error {
 	return nil
 }
 
-// Deletes a Pod in the test namespace then waits us to timeout for the Pod not to be visible to the
+// Deletes a Pod in some namespace then waits us to timeout for the Pod not to be visible to the
 // client any more.
-func (data *TestData) deletePodAndWait(timeout time.Duration, name string) error {
-	if err := data.deletePod(testNamespace, name); err != nil {
+func (data *TestData) deletePodAndWait(timeout time.Duration, ns string, name string) error {
+	if err := data.deletePod(ns, name); err != nil {
 		return err
 	}
 
 	if err := wait.Poll(defaultInterval, timeout, func() (bool, error) {
-		if _, err := data.clientset.CoreV1().Pods(testNamespace).Get(context.TODO(), name, metav1.GetOptions{}); err != nil {
+		if _, err := data.clientset.CoreV1().Pods(ns).Get(context.TODO(), name, metav1.GetOptions{}); err != nil {
 			if errors.IsNotFound(err) {
 				return true, nil
 			}
@@ -2009,7 +2018,19 @@ func (data *TestData) createDaemonSet(name string, ns string, ctrName string, im
 		if err := data.clientset.AppsV1().DaemonSets(ns).Delete(context.TODO(), name, metav1.DeleteOptions{}); err != nil {
 			return err
 		}
-		return nil
+		err := wait.Poll(defaultInterval, 120 * time.Second, func() (bool, error) {
+			pl, err := data.clientset.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: "antrea-e2e=" + name,
+			})
+			if err != nil {
+				return false, err
+			}
+			if len(pl.Items) != 0 {
+				return false, nil
+			}
+			return true, nil
+		})
+		return err
 	}
 
 	return resDS, cleanup, nil
