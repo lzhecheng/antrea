@@ -28,7 +28,7 @@ func TestGetNodeAddr(t *testing.T) {
 	tests := []struct {
 		name         string
 		node         *corev1.Node
-		expectedAddr net.IP
+		expectedAddr []net.IP
 		expectedErr  error
 	}{
 		{
@@ -54,7 +54,7 @@ func TestGetNodeAddr(t *testing.T) {
 					},
 				},
 			},
-			expectedAddr: net.ParseIP("192.168.10.10"),
+			expectedAddr: []net.IP{net.ParseIP("192.168.10.10")},
 			expectedErr:  nil,
 		},
 		{
@@ -76,7 +76,7 @@ func TestGetNodeAddr(t *testing.T) {
 					},
 				},
 			},
-			expectedAddr: net.ParseIP("1.1.1.1"),
+			expectedAddr: []net.IP{net.ParseIP("1.1.1.1")},
 			expectedErr:  nil,
 		},
 		{
@@ -100,7 +100,7 @@ func TestGetNodeAddr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			addr, err := GetNodeAddr(tt.node)
+			addr, err := GetNodeAddrs(tt.node)
 			assert.Equal(t, tt.expectedErr, err)
 			assert.Equal(t, tt.expectedAddr, addr)
 		})

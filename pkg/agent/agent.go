@@ -530,15 +530,17 @@ func (i *Initializer) configureGatewayInterface(gatewayIface *interfacestore.Int
 
 	i.nodeConfig.GatewayConfig = &config.GatewayConfig{Name: i.hostGateway, MAC: gwMAC}
 	gatewayIface.MAC = gwMAC
+	gatewayIface.IPs = []net.IP{}
 	if i.networkConfig.TrafficEncapMode.IsNetworkPolicyOnly() {
-		// Assign IP to gw as required by SpoofGuard.
-		// NodeIPAddr can be either IPv4 or IPv6.
-		if i.nodeConfig.NodeIPAddr.IP.To4() != nil {
-			i.nodeConfig.GatewayConfig.IPv4 = i.nodeConfig.NodeIPAddr.IP
-		} else {
-			i.nodeConfig.GatewayConfig.IPv6 = i.nodeConfig.NodeIPAddr.IP
+		// Assign IPs to gw as required by SpoofGuard.
+		if i.nodeConfig.NodeIPv4Addr != nil {
+			i.nodeConfig.GatewayConfig.IPv4 = i.nodeConfig.NodeIPv4Addr.IP
+			gatewayIface.IPs = append(gatewayIface.IPs, i.nodeConfig.NodeIPv4Addr.IP)
 		}
-		gatewayIface.IPs = []net.IP{i.nodeConfig.NodeIPAddr.IP}
+		if i.nodeConfig.NodeIPv6Addr != nil {
+			i.nodeConfig.GatewayConfig.IPv6 = i.nodeConfig.NodeIPv6Addr.IP
+			gatewayIface.IPs = append(gatewayIface.IPs, i.nodeConfig.NodeIPv6Addr.IP)
+		}
 		// No need to assign local CIDR to gw0 because local CIDR is not managed by Antrea
 		return nil
 	}
@@ -642,13 +644,13 @@ func (i *Initializer) initNodeLocalConfig() error {
 		return err
 	}
 
-	ipAddr, err := k8s.GetNodeAddr(node)
+	ipAddrs, err := k8s.GetNodeAddrs(node)
 	if err != nil {
-		return fmt.Errorf("failed to obtain local IP address from K8s: %w", err)
+		return fmt.Errorf("failed to obtain local IP addresses from K8s: %w", err)
 	}
-	localAddr, localIntf, err := getIPNetDeviceFromIP(ipAddr)
+	localV4Addr, localV6Addr, localIntf, err := getIPNetDeviceFromIP(ipAddrs)
 	if err != nil {
-		return fmt.Errorf("failed to get local IPNet device with IP %v: %v", ipAddr, err)
+		return fmt.Errorf("failed to get local IPNet device with IP %v: %v", ipAddrs, err)
 	}
 
 	// Update the Node's MAC address in the annotations of the Node. The MAC address will be used for direct routing by
@@ -675,7 +677,8 @@ func (i *Initializer) initNodeLocalConfig() error {
 		Name:            nodeName,
 		OVSBridge:       i.ovsBridge,
 		DefaultTunName:  defaultTunInterfaceName,
-		NodeIPAddr:      localAddr,
+		NodeIPv4Addr:    localV4Addr,
+		NodeIPv6Addr:    localV6Addr,
 		UplinkNetConfig: new(config.AdapterNetConfig)}
 
 	mtu, err := i.getNodeMTU(localIntf)
@@ -849,7 +852,7 @@ func (i *Initializer) getNodeMTU(localIntf *net.Interface) (int, error) {
 		} else if i.networkConfig.TunnelType == ovsconfig.GRETunnel {
 			mtu -= config.GREOverhead
 		}
-		if i.nodeConfig.NodeIPAddr.IP.To4() == nil {
+		if i.nodeConfig.NodeIPv6Addr != nil {
 			mtu -= config.IPv6ExtraOverhead
 		}
 	}

@@ -55,7 +55,7 @@ func TestGetDefaultLocalNodeAddr(t *testing.T) {
 	defer conn.Close()
 	ip := conn.LocalAddr().(*net.UDPAddr).IP
 
-	_, dev, err := GetIPNetDeviceFromIP(ip)
+	_, _, dev, err := GetIPNetDeviceFromIP([]net.IP{ip})
 	if err != nil {
 		t.Error(err)
 	}

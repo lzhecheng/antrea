@@ -21,27 +21,28 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// GetNodeAddr gets the available IP address of a Node. GetNodeAddr will first try to get the NodeInternalIP, then try
+// GetNodeAddrs gets the available IP addresses of a Node. GetNodeAddrs will first try to get the NodeInternalIP, then try
 // to get the NodeExternalIP.
-// Note: Although K8s supports dual-stack, there is only a single Internal address per Node because of issue (
-// kubernetes/kubernetes#91940 ). The Node might have multiple addresses after the issue is fixed, and one per address
-// family. And we should change the return type at that time.
-func GetNodeAddr(node *v1.Node) (net.IP, error) {
-	addresses := make(map[v1.NodeAddressType]string)
+func GetNodeAddrs(node *v1.Node) ([]net.IP, error) {
+	addresses := make(map[v1.NodeAddressType][]string)
 	for _, addr := range node.Status.Addresses {
-		addresses[addr.Type] = addr.Address
+		addresses[addr.Type] = append(addresses[addr.Type], addr.Address)
 	}
-	var ipAddrStr string
+	var ipAddrStrs []string
 	if internalIP, ok := addresses[v1.NodeInternalIP]; ok {
-		ipAddrStr = internalIP
+		ipAddrStrs = internalIP
 	} else if externalIP, ok := addresses[v1.NodeExternalIP]; ok {
-		ipAddrStr = externalIP
+		ipAddrStrs = externalIP
 	} else {
 		return nil, fmt.Errorf("Node %s has neither external ip nor internal ip", node.Name)
 	}
-	ipAddr := net.ParseIP(ipAddrStr)
-	if ipAddr == nil {
-		return nil, fmt.Errorf("<%v> is not a valid ip address", ipAddrStr)
+	var nodeAddrs []net.IP
+	for i := range ipAddrStrs {
+		addr := net.ParseIP(ipAddrStrs[i])
+		if addr == nil {
+			return nil, fmt.Errorf("'%s' is not a valid IP address", ipAddrStrs[i])
+		}
+		nodeAddrs = append(nodeAddrs, addr)
 	}
-	return ipAddr, nil
+	return nodeAddrs, nil
 }

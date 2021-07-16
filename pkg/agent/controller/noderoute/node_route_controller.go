@@ -135,7 +135,7 @@ func nodeRouteInfoPodCIDRIndexFunc(obj interface{}) ([]string, error) {
 type nodeRouteInfo struct {
 	nodeName  string
 	podCIDRs  []*net.IPNet
-	nodeIP    net.IP
+	nodeIPs   []net.IP
 	gatewayIP []net.IP
 	nodeMAC   net.HardwareAddr
 }
@@ -215,17 +215,26 @@ func (c *Controller) removeStaleTunnelPorts() error {
 				continue
 			}
 
-			peerNodeIP, err := k8s.GetNodeAddr(node)
+			peerNodeIPs, err := k8s.GetNodeAddrs(node)
 			if err != nil {
 				klog.Errorf("Failed to retrieve IP address of Node %s: %v", node.Name, err)
 				continue
 			}
+			var peerNodeIPv4, peerNodeIPv6 net.IP
+			for _, ip := range peerNodeIPs {
+				if ip.To4() == nil {
+					peerNodeIPv6 = ip
+				} else {
+					peerNodeIPv4 = ip
+				}
+			}
 
 			ifaceID := util.GenerateNodeTunnelInterfaceKey(node.Name)
 			validConfiguration := interfaceConfig.PSK == c.networkConfig.IPSecPSK &&
-				interfaceConfig.RemoteIP.Equal(peerNodeIP) &&
 				interfaceConfig.TunnelInterfaceConfig.Type == c.networkConfig.TunnelType
-			if validConfiguration {
+			v4RemoteIP := peerNodeIPv4 != nil && interfaceConfig.RemoteIP.Equal(peerNodeIPv4)
+			v6RemoteIP := peerNodeIPv6 != nil && interfaceConfig.RemoteIP.Equal(peerNodeIPv6)
+			if validConfiguration && (v4RemoteIP || v6RemoteIP) {
 				desiredInterfaces[ifaceID] = true
 			}
 		}
@@ -430,7 +439,7 @@ func (c *Controller) addNodeRoute(nodeName string, node *corev1.Node) error {
 	klog.Infof("Adding routes and flows to Node %s, podCIDRs: %v, addresses: %v",
 		nodeName, podCIDRStrs, node.Status.Addresses)
 
-	var podCIDRs []*net.IPNet
+	var peerPodCIDRs []*net.IPNet
 	peerConfig := make(map[*net.IPNet]net.IP, len(podCIDRStrs))
 	for _, podCIDR := range podCIDRStrs {
 		klog.Infof("Adding routes and flows to Node %s, podCIDR: %s, addresses: %v",
@@ -467,37 +476,53 @@ func (c *Controller) addNodeRoute(nodeName string, node *corev1.Node) error {
 		}
 		peerGatewayIP := ip.NextIP(peerPodCIDRAddr)
 		peerConfig[peerPodCIDR] = peerGatewayIP
-		podCIDRs = append(podCIDRs, peerPodCIDR)
+		peerPodCIDRs = append(peerPodCIDRs, peerPodCIDR)
 	}
 
-	peerNodeIP, err := k8s.GetNodeAddr(node)
+	peerNodeIPs, err := k8s.GetNodeAddrs(node)
 	if err != nil {
-		klog.Errorf("Failed to retrieve IP address of Node %s: %v", nodeName, err)
+		klog.Errorf("Failed to retrieve IP addresses of Node %s: %v", nodeName, err)
 		return nil
 	}
 
-	ipsecTunOFPort := int32(0)
-	if c.networkConfig.EnableIPSecTunnel {
-		// Create a separate tunnel port for the Node, as OVS IPSec monitor needs to
-		// read PSK and remote IP from the Node's tunnel interface to create IPSec
-		// security policies.
-		if ipsecTunOFPort, err = c.createIPSecTunnelPort(nodeName, peerNodeIP); err != nil {
-			return err
+	for _, peerNodeIP := range peerNodeIPs {
+		ipsecTunOFPort := int32(0)
+		if c.networkConfig.EnableIPSecTunnel {
+			// Create a separate tunnel port for the Node, as OVS IPSec monitor needs to
+			// read PSK and remote IP from the Node's tunnel interface to create IPSec
+			// security policies.
+			if ipsecTunOFPort, err = c.createIPSecTunnelPort(nodeName, peerNodeIP); err != nil {
+				return err
+			}
+		}
+
+		err = c.ofClient.InstallNodeFlows(
+			nodeName,
+			peerConfig,
+			peerNodeIP,
+			uint32(ipsecTunOFPort),
+			peerNodeMAC)
+		if err != nil {
+			return fmt.Errorf("failed to install flows to Node %s: %v", nodeName, err)
 		}
 	}
 
-	err = c.ofClient.InstallNodeFlows(
-		nodeName,
-		peerConfig,
-		peerNodeIP,
-		uint32(ipsecTunOFPort),
-		peerNodeMAC)
-	if err != nil {
-		return fmt.Errorf("failed to install flows to Node %s: %v", nodeName, err)
-	}
-
 	var peerGatewayIPs []net.IP
+	var peerNodeIPv4, peerNodeIPv6 net.IP
+	for _, ip := range peerNodeIPs {
+		if ip.To4() == nil {
+			peerNodeIPv6 = ip
+		} else {
+			peerNodeIPv4 = ip
+		}
+	}
 	for peerPodCIDR, peerGatewayIP := range peerConfig {
+		var peerNodeIP net.IP
+		if peerGatewayIP.To4() == nil {
+			peerNodeIP = peerNodeIPv6
+		} else {
+			peerNodeIP = peerNodeIPv4
+		}
 		if err := c.routeClient.AddRoutes(peerPodCIDR, nodeName, peerNodeIP, peerGatewayIP); err != nil {
 			return err
 		}
@@ -505,11 +530,12 @@ func (c *Controller) addNodeRoute(nodeName string, node *corev1.Node) error {
 	}
 	c.installedNodes.Add(&nodeRouteInfo{
 		nodeName:  nodeName,
-		podCIDRs:  podCIDRs,
-		nodeIP:    peerNodeIP,
+		podCIDRs:  peerPodCIDRs,
+		nodeIPs:   peerNodeIPs,
 		gatewayIP: peerGatewayIPs,
 		nodeMAC:   peerNodeMAC,
 	})
+
 	return err
 }
 

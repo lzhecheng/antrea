@@ -390,7 +390,7 @@ func (c *client) InstallNodeFlows(hostname string,
 			// only work for IPv4 addresses.
 			flows = append(flows, c.arpResponderFlow(peerGatewayIP, cookie.Node))
 		}
-		if c.encapMode.NeedsEncapToPeer(tunnelPeerIP, c.nodeConfig.NodeIPAddr) {
+		if c.encapMode.NeedsEncapToPeer(tunnelPeerIP, c.nodeConfig.NodeIPv4Addr) || c.encapMode.NeedsEncapToPeer(tunnelPeerIP, c.nodeConfig.NodeIPv6Addr) {
 			// tunnelPeerIP is the Node Internal Address. In a dual-stack setup, whether this address is an IPv4 address or an
 			// IPv6 one is decided by the address family of Node Internal Address.
 			flows = append(flows, c.l3FwdFlowToRemote(localGatewayMAC, *peerPodCIDR, tunnelPeerIP, cookie.Node))
@@ -724,21 +724,34 @@ func (c *client) Initialize(roundInfo types.RoundInfo, nodeConfig *config.NodeCo
 }
 
 func (c *client) InstallExternalFlows() error {
-	nodeIP := c.nodeConfig.NodeIPAddr.IP
-	localGatewayMAC := c.nodeConfig.GatewayConfig.MAC
+	install := func(nodeIP net.IP) error {
+		localGatewayMAC := c.nodeConfig.GatewayConfig.MAC
 
-	var flows []binding.Flow
-	if c.nodeConfig.PodIPv4CIDR != nil {
-		flows = c.externalFlows(nodeIP, *c.nodeConfig.PodIPv4CIDR, localGatewayMAC)
-	}
-	if c.nodeConfig.PodIPv6CIDR != nil {
-		flows = append(flows, c.externalFlows(nodeIP, *c.nodeConfig.PodIPv6CIDR, localGatewayMAC)...)
+		var flows []binding.Flow
+		if c.nodeConfig.PodIPv4CIDR != nil {
+			flows = c.externalFlows(nodeIP, *c.nodeConfig.PodIPv4CIDR, localGatewayMAC)
+		}
+		if c.nodeConfig.PodIPv6CIDR != nil {
+			flows = append(flows, c.externalFlows(nodeIP, *c.nodeConfig.PodIPv6CIDR, localGatewayMAC)...)
+		}
+
+		if err := c.ofEntryOperations.AddAll(flows); err != nil {
+			return fmt.Errorf("failed to install flows for external communication: %v", err)
+		}
+		c.hostNetworkingFlows = append(c.hostNetworkingFlows, flows...)
+		return nil
 	}
 
-	if err := c.ofEntryOperations.AddAll(flows); err != nil {
-		return fmt.Errorf("failed to install flows for external communication: %v", err)
+	if c.nodeConfig.NodeIPv4Addr != nil {
+		if err := install(c.nodeConfig.NodeIPv4Addr.IP); err != nil {
+			return err
+		}
 	}
-	c.hostNetworkingFlows = append(c.hostNetworkingFlows, flows...)
+	if c.nodeConfig.NodeIPv6Addr != nil {
+		if err := install(c.nodeConfig.NodeIPv6Addr.IP); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -235,7 +235,7 @@ func TestInitNodeLocalConfig(t *testing.T) {
 				OVSBridge:       ovsBridge,
 				DefaultTunName:  defaultTunInterfaceName,
 				PodIPv4CIDR:     podCIDR,
-				NodeIPAddr:      nodeIPNet,
+				NodeIPv4Addr:    nodeIPNet,
 				NodeMTU:         tt.expectedMTU,
 				UplinkNetConfig: new(config.AdapterNetConfig),
 			}
@@ -249,8 +249,8 @@ func TestInitNodeLocalConfig(t *testing.T) {
 
 func mockGetIPNetDeviceFromIP(ipNet *net.IPNet, ipDevice *net.Interface) func() {
 	prevGetIPNetDeviceFromIP := getIPNetDeviceFromIP
-	getIPNetDeviceFromIP = func(localIP net.IP) (*net.IPNet, *net.Interface, error) {
-		return ipNet, ipDevice, nil
+	getIPNetDeviceFromIP = func(localIP []net.IP) (*net.IPNet, *net.IPNet, *net.Interface, error) {
+		return ipNet, nil, ipDevice, nil
 	}
 	return func() { getIPNetDeviceFromIP = prevGetIPNetDeviceFromIP }
 }

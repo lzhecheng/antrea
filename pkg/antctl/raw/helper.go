@@ -97,12 +97,15 @@ func CreateAgentClientCfg(k8sClientset kubernetes.Interface, antreaClientset ant
 	if agentInfo == nil {
 		return nil, fmt.Errorf("no Antrea Agent found for Node name %s", nodeName)
 	}
-	nodeIP, err := k8s.GetNodeAddr(node)
+	nodeIPs, err := k8s.GetNodeAddrs(node)
 	if err != nil {
 		return nil, fmt.Errorf("error when parsing IP of Node %s", nodeName)
 	}
 	cfg := rest.CopyConfig(cfgTmpl)
-	cfg.Host = fmt.Sprintf("https://%s", net.JoinHostPort(nodeIP.String(), fmt.Sprint(agentInfo.APIPort)))
+	if len(nodeIPs) == 0 {
+		return nil, fmt.Errorf("there is no NodeIP on agent Node")
+	}
+	cfg.Host = fmt.Sprintf("https://%s", net.JoinHostPort(nodeIPs[0].String(), fmt.Sprint(agentInfo.APIPort)))
 	return cfg, nil
 }
 
@@ -116,13 +119,16 @@ func CreateControllerClientCfg(k8sClientset kubernetes.Interface, antreaClientse
 	if err != nil {
 		return nil, fmt.Errorf("error when searching the Node of the controller: %w", err)
 	}
-	var controllerNodeIP net.IP
-	controllerNodeIP, err = k8s.GetNodeAddr(controllerNode)
+	var controllerNodeIPs []net.IP
+	controllerNodeIPs, err = k8s.GetNodeAddrs(controllerNode)
 	if err != nil {
 		return nil, fmt.Errorf("error when parsing controller IP: %w", err)
 	}
 
 	cfg := rest.CopyConfig(cfgTmpl)
-	cfg.Host = fmt.Sprintf("https://%s", net.JoinHostPort(controllerNodeIP.String(), fmt.Sprint(controllerInfo.APIPort)))
+	if len(controllerNodeIPs) == 0 {
+		return nil, fmt.Errorf("there is no NodeIP on controller Node")
+	}
+	cfg.Host = fmt.Sprintf("https://%s", net.JoinHostPort(controllerNodeIPs[0].String(), fmt.Sprint(controllerInfo.APIPort)))
 	return cfg, nil
 }

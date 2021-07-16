@@ -216,7 +216,7 @@ func TestReplayFlowsNetworkPolicyFlows(t *testing.T) {
 }
 
 func testExternalFlows(t *testing.T, config *testConfig) {
-	nodeIP := config.nodeConfig.NodeIPAddr.IP
+	nodeIP := config.nodeConfig.NodeIPv4Addr.IP
 	var localSubnet *net.IPNet
 	if config.nodeConfig.PodIPv4CIDR != nil {
 		localSubnet = config.nodeConfig.PodIPv4CIDR
@@ -855,7 +855,7 @@ func prepareConfiguration() *testConfig {
 		MAC:  gwMAC,
 	}
 	nodeConfig := &config1.NodeConfig{
-		NodeIPAddr:    nodeSubnet,
+		NodeIPv4Addr:  nodeSubnet,
 		GatewayConfig: gatewayConfig,
 		PodIPv4CIDR:   podIPv4CIDR,
 	}
@@ -900,7 +900,7 @@ func prepareIPv6Configuration() *testConfig {
 		MAC:  gwMAC,
 	}
 	nodeConfig := &config1.NodeConfig{
-		NodeIPAddr:    nodeSubnet,
+		NodeIPv4Addr:  nodeSubnet,
 		GatewayConfig: gatewayConfig,
 		PodIPv6CIDR:   podIPv6CIDR,
 	}

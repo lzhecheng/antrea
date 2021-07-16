@@ -297,7 +297,8 @@ func (c *client) hostBridgeUplinkFlows(localSubnet net.IPNet, category cookie.Ca
 
 func (c *client) l3FwdFlowToRemoteViaRouting(localGatewayMAC net.HardwareAddr, remoteGatewayMAC net.HardwareAddr,
 	category cookie.Category, peerIP net.IP, peerPodCIDR *net.IPNet) []binding.Flow {
-	if c.encapMode.NeedsDirectRoutingToPeer(peerIP, c.nodeConfig.NodeIPAddr) && remoteGatewayMAC != nil {
+	// Currently, IPv6 is not supported on Windows.
+	if c.encapMode.NeedsDirectRoutingToPeer(peerIP, c.nodeConfig.NodeIPv4Addr) && remoteGatewayMAC != nil {
 		// It enhances Windows Noencap mode performance by bypassing host network.
 		flows := []binding.Flow{c.pipeline[l2ForwardingCalcTable].BuildFlow(priorityNormal).
 			MatchDstMAC(remoteGatewayMAC).

@@ -47,7 +47,8 @@ func (i *Initializer) prepareHostNetwork() error {
 		return err
 	}
 	// Get uplink network configuration.
-	_, adapter, err := util.GetIPNetDeviceFromIP(i.nodeConfig.NodeIPAddr.IP)
+	// Windows doesn't support IPv6 now.
+	_, _, adapter, err := util.GetIPNetDeviceFromIP([]net.IP{i.nodeConfig.NodeIPv4Addr.IP})
 	if err != nil {
 		return err
 	}
@@ -66,7 +67,7 @@ func (i *Initializer) prepareHostNetwork() error {
 	}
 	i.nodeConfig.UplinkNetConfig.Name = adapter.Name
 	i.nodeConfig.UplinkNetConfig.MAC = adapter.HardwareAddr
-	i.nodeConfig.UplinkNetConfig.IP = i.nodeConfig.NodeIPAddr
+	i.nodeConfig.UplinkNetConfig.IP = i.nodeConfig.NodeIPv4Addr
 	i.nodeConfig.UplinkNetConfig.Index = adapter.Index
 	defaultGW, err := util.GetDefaultGatewayByInterfaceIndex(adapter.Index)
 	if err != nil {
@@ -89,7 +90,7 @@ func (i *Initializer) prepareHostNetwork() error {
 	if subnetCIDR == nil {
 		return fmt.Errorf("failed to find valid IPv4 PodCIDR")
 	}
-	return util.PrepareHNSNetwork(subnetCIDR, i.nodeConfig.NodeIPAddr, adapter)
+	return util.PrepareHNSNetwork(subnetCIDR, i.nodeConfig.NodeIPv4Addr, adapter)
 }
 
 // prepareOVSBridge adds local port and uplink to ovs bridge.
@@ -206,7 +207,7 @@ func (i *Initializer) initHostNetworkFlows() error {
 
 // getTunnelLocalIP returns local_ip of tunnel port
 func (i *Initializer) getTunnelPortLocalIP() net.IP {
-	return i.nodeConfig.NodeIPAddr.IP
+	return i.nodeConfig.NodeIPv4Addr.IP
 }
 
 // saveHostRoutes saves routes which are configured on uplink interface before

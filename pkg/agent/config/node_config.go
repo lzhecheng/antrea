@@ -83,8 +83,10 @@ type NodeConfig struct {
 	// The CIDR block from where to allocate IPv6 address to Pod.
 	// It's nil for the net workPolicyOnly trafficEncapMode which doesn't do IPAM.
 	PodIPv6CIDR *net.IPNet
-	// The Node's IP used in Kubernetes. It has the network mask information.
-	NodeIPAddr *net.IPNet
+	// The Node's IPv4 IP used in Kubernetes. It has the network mask information.
+	NodeIPv4Addr *net.IPNet
+	// The Node's IPv6 IP used in Kubernetes. It has the network mask information.
+	NodeIPv6Addr *net.IPNet
 	// Set either via defaultMTU config in antrea.yaml or auto discovered.
 	// Auto discovery will use MTU value of the Node's primary interface.
 	// For Encap and Hybrid mode, Node MTU will be adjusted to account for encap header.
@@ -96,8 +98,8 @@ type NodeConfig struct {
 }
 
 func (n *NodeConfig) String() string {
-	return fmt.Sprintf("NodeName: %s, OVSBridge: %s, PodIPv4CIDR: %s, PodIPv6CIDR: %s, NodeIP: %s, Gateway: %s",
-		n.Name, n.OVSBridge, n.PodIPv4CIDR, n.PodIPv6CIDR, n.NodeIPAddr, n.GatewayConfig)
+	return fmt.Sprintf("NodeName: %s, OVSBridge: %s, PodIPv4CIDR: %s, PodIPv6CIDR: %s, NodeIPv4: %s, NodeIPv6: %s, Gateway: %s",
+		n.Name, n.OVSBridge, n.PodIPv4CIDR, n.PodIPv6CIDR, n.NodeIPv4Addr, n.NodeIPv6Addr, n.GatewayConfig)
 }
 
 // User provided network configuration parameters.
@@ -109,15 +111,13 @@ type NetworkConfig struct {
 }
 
 // IsIPv4Enabled returns true if the cluster network supports IPv4.
-// TODO: support dual-stack in networkPolicyOnly mode.
 func IsIPv4Enabled(nodeConfig *NodeConfig, trafficEncapMode TrafficEncapModeType) bool {
 	return nodeConfig.PodIPv4CIDR != nil ||
-		(trafficEncapMode.IsNetworkPolicyOnly() && nodeConfig.NodeIPAddr.IP.To4() != nil)
+		(trafficEncapMode.IsNetworkPolicyOnly() && nodeConfig.NodeIPv4Addr != nil)
 }
 
 // IsIPv6Enabled returns true if the cluster network supports IPv6.
-// TODO: support dual-stack in networkPolicyOnly mode.
 func IsIPv6Enabled(nodeConfig *NodeConfig, trafficEncapMode TrafficEncapModeType) bool {
 	return nodeConfig.PodIPv6CIDR != nil ||
-		(trafficEncapMode.IsNetworkPolicyOnly() && nodeConfig.NodeIPAddr.IP.To4() == nil)
+		(trafficEncapMode.IsNetworkPolicyOnly() && nodeConfig.NodeIPv6Addr != nil)
 }

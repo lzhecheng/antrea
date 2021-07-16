@@ -35,6 +35,7 @@ import (
 	"antrea.io/antrea/pkg/agent/util"
 	"antrea.io/antrea/pkg/agent/util/ipset"
 	"antrea.io/antrea/pkg/agent/util/iptables"
+	"antrea.io/antrea/pkg/agent/util/sysctl"
 	"antrea.io/antrea/pkg/ovs/ovsconfig"
 	"antrea.io/antrea/pkg/util/env"
 )
@@ -128,6 +129,11 @@ func (c *Client) Initialize(nodeConfig *config.NodeConfig, done func()) error {
 	// Sets up the IP routes and IP rule required to route packets in host network.
 	if err := c.initIPRoutes(); err != nil {
 		return fmt.Errorf("failed to initialize ip routes: %v", err)
+	}
+
+	// Ensure IPv6 forwarding is enabled if it is a dual-stack or IPv6-only cluster.
+	if c.nodeConfig.NodeIPv6Addr != nil && sysctl.EnsureSysctlNetValue("ipv6/conf/all/forwarding", 1) != nil {
+		return fmt.Errorf("failed to enable IPv6 forwarding")
 	}
 
 	return nil
@@ -438,9 +444,17 @@ func (c *Client) restoreIptablesData(podCIDR *net.IPNet, podIPSet string, snatMa
 func (c *Client) initIPRoutes() error {
 	if c.networkConfig.TrafficEncapMode.IsNetworkPolicyOnly() {
 		gwLink := util.GetNetLink(c.nodeConfig.GatewayConfig.Name)
-		_, gwIP, _ := net.ParseCIDR(fmt.Sprintf("%s/32", c.nodeConfig.NodeIPAddr.IP.String()))
-		if err := netlink.AddrReplace(gwLink, &netlink.Addr{IPNet: gwIP}); err != nil {
-			return fmt.Errorf("failed to add address %s to gw %s: %v", gwIP, gwLink.Attrs().Name, err)
+		if c.nodeConfig.NodeIPv4Addr != nil {
+			_, gwIP, _ := net.ParseCIDR(fmt.Sprintf("%s/32", c.nodeConfig.NodeIPv4Addr.IP.String()))
+			if err := netlink.AddrReplace(gwLink, &netlink.Addr{IPNet: gwIP}); err != nil {
+				return fmt.Errorf("failed to add address %s to gw %s: %v", gwIP, gwLink.Attrs().Name, err)
+			}
+		}
+		if c.nodeConfig.NodeIPv6Addr != nil {
+			_, gwIP, _ := net.ParseCIDR(fmt.Sprintf("%s/128", c.nodeConfig.NodeIPv6Addr.IP.String()))
+			if err := netlink.AddrReplace(gwLink, &netlink.Addr{IPNet: gwIP}); err != nil {
+				return fmt.Errorf("failed to add address %s to gw %s: %v", gwIP, gwLink.Attrs().Name, err)
+			}
 		}
 	}
 	return nil
@@ -565,6 +579,13 @@ func (c *Client) listIPv6NeighborsOnGateway() (map[string]*netlink.Neigh, error)
 
 // AddRoutes adds routes to a new podCIDR. It overrides the routes if they already exist.
 func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, nodeIP, nodeGwIP net.IP) error {
+	var nodeIPAddr *net.IPNet
+	if podCIDR.IP.To4() == nil {
+		nodeIPAddr = c.nodeConfig.NodeIPv6Addr
+	} else {
+		nodeIPAddr = c.nodeConfig.NodeIPv4Addr
+	}
+
 	podCIDRStr := podCIDR.String()
 	ipsetName := getIPSetName(podCIDR.IP)
 	// Add this podCIDR to antreaPodIPSet so that packets to them won't be masqueraded when they leave the host.
@@ -576,7 +597,7 @@ func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, nodeIP, nodeGwIP
 		Dst: podCIDR,
 	}
 	var routes []*netlink.Route
-	if c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(nodeIP, c.nodeConfig.NodeIPAddr) {
+	if c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(nodeIP, nodeIPAddr) {
 		if podCIDR.IP.To4() == nil {
 			// "on-link" is not identified in IPv6 route entries, so split the configuration into 2 entries.
 			routes = []*netlink.Route{
@@ -590,7 +611,7 @@ func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, nodeIP, nodeGwIP
 		}
 		route.LinkIndex = c.nodeConfig.GatewayConfig.LinkIndex
 		route.Gw = nodeGwIP
-	} else if c.networkConfig.TrafficEncapMode.NeedsDirectRoutingToPeer(nodeIP, c.nodeConfig.NodeIPAddr) {
+	} else if c.networkConfig.TrafficEncapMode.NeedsDirectRoutingToPeer(nodeIP, nodeIPAddr) {
 		// NoEncap traffic to Node on the same subnet.
 		// Set the peerNodeIP as next hop.
 		route.Gw = nodeIP

@@ -252,7 +252,7 @@ func (c *Cluster) enqueueExternalIPPool(obj interface{}) {
 // newClusterMember gets the Node's IP and returns a cluster member "<IP>:<clusterMemberlistPort>"
 // representing that Node in the memberlist cluster.
 func (c *Cluster) newClusterMember(node *corev1.Node) (string, error) {
-	nodeAddr, err := k8s.GetNodeAddr(node)
+	nodeAddr, err := k8s.GetNodeAddrs(node)
 	if err != nil {
 		return "", fmt.Errorf("obtain IP address from K8s Node failed: %v", err)
 	}

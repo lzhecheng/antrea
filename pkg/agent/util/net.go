@@ -100,27 +100,40 @@ func dialUnix(address string) (net.Conn, error) {
 	return net.Dial("unix", address)
 }
 
-// GetIPNetDeviceFromIP returns a local IP/mask and associated device from IP.
-func GetIPNetDeviceFromIP(localIP net.IP) (*net.IPNet, *net.Interface, error) {
+// GetIPNetDeviceFromIP returns local IPs/masks and associated devices from IP.
+func GetIPNetDeviceFromIP(localIPs []net.IP) (v4IPnet *net.IPNet, v6IPnet *net.IPNet, iface *net.Interface, err error) {
 	linkList, err := net.Interfaces()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	for _, link := range linkList {
-		addrList, err := link.Addrs()
+	for i := range linkList {
+		addrList, err := linkList[i].Addrs()
 		if err != nil {
 			continue
 		}
 		for _, addr := range addrList {
 			if ipNet, ok := addr.(*net.IPNet); ok {
-				if ipNet.IP.Equal(localIP) {
-					return ipNet, &link, nil
+				for _, ip := range localIPs {
+					if ipNet.IP.Equal(ip) {
+						iface = &linkList[i]
+						if ip.To4() == nil {
+							v6IPnet = ipNet
+						} else {
+							v4IPnet = ipNet
+						}
+					}
 				}
 			}
 		}
+		if iface != nil {
+			break
+		}
 	}
-	return nil, nil, fmt.Errorf("unable to find local IP and device")
+	if iface == nil {
+		return nil, nil, nil, fmt.Errorf("unable to find local IPs and device")
+	}
+	return v4IPnet, v6IPnet, iface, nil
 }
 
 func GetIPv4Addr(ips []net.IP) net.IP {

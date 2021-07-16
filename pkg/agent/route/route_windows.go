@@ -109,10 +109,11 @@ func (c *Client) AddRoutes(podCIDR *net.IPNet, nodeName string, peerNodeIP, peer
 		DestinationSubnet: podCIDR,
 		RouteMetric:       util.DefaultMetric,
 	}
-	if c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
+	// Currently, IPv6 is not supported on Windows.
+	if c.networkConfig.TrafficEncapMode.NeedsEncapToPeer(peerNodeIP, c.nodeConfig.NodeIPv4Addr) {
 		route.LinkIndex = c.nodeConfig.GatewayConfig.LinkIndex
 		route.GatewayAddress = peerGwIP
-	} else if c.networkConfig.TrafficEncapMode.NeedsDirectRoutingToPeer(peerNodeIP, c.nodeConfig.NodeIPAddr) {
+	} else if c.networkConfig.TrafficEncapMode.NeedsDirectRoutingToPeer(peerNodeIP, c.nodeConfig.NodeIPv4Addr) {
 		// NoEncap traffic to Node on the same subnet.
 		// Set the peerNodeIP as next hop.
 		route.LinkIndex = c.bridgeInfIndex

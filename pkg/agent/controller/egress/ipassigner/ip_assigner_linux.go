@@ -49,7 +49,7 @@ type ipAssigner struct {
 
 // NewIPAssigner returns an *ipAssigner.
 func NewIPAssigner(nodeIPAddr net.IP, dummyDeviceName string) (*ipAssigner, error) {
-	_, egressInterface, err := util.GetIPNetDeviceFromIP(nodeIPAddr)
+	_, _, egressInterface, err := util.GetIPNetDeviceFromIP([]net.IP{nodeIPAddr})
 	if err != nil {
 		return nil, fmt.Errorf("get IPNetDevice from ip %v error: %+v", nodeIPAddr, err)
 	}

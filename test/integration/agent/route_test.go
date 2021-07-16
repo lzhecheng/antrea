@@ -48,14 +48,14 @@ func ExecOutputTrim(cmd string) (string, error) {
 }
 
 var (
-	_, podCIDR, _       = net.ParseCIDR("10.10.10.0/24")
-	nodeIP, nodeIntf, _ = util.GetIPNetDeviceFromIP(func() net.IP {
+	_, podCIDR, _            = net.ParseCIDR("10.10.10.0/24")
+	nodeIPv4, _, nodeIntf, _ = util.GetIPNetDeviceFromIP(func() []net.IP {
 		conn, _ := net.Dial("udp", "8.8.8.8:80")
 		defer conn.Close()
-		return conn.LocalAddr().(*net.UDPAddr).IP
+		return []net.IP{conn.LocalAddr().(*net.UDPAddr).IP}
 	}())
 	nodeLink, _       = netlink.LinkByName(nodeIntf.Name)
-	localPeerIP       = ip.NextIP(nodeIP.IP)
+	localPeerIP       = ip.NextIP(nodeIPv4.IP)
 	remotePeerIP      = net.ParseIP("50.50.50.1")
 	_, serviceCIDR, _ = net.ParseCIDR("200.200.0.0/16")
 	gwIP              = net.ParseIP("10.10.10.1")
@@ -65,7 +65,7 @@ var (
 	nodeConfig        = &config.NodeConfig{
 		Name:          "test",
 		PodIPv4CIDR:   podCIDR,
-		NodeIPAddr:    nodeIP,
+		NodeIPv4Addr:  nodeIPv4,
 		GatewayConfig: gwConfig,
 	}
 )
@@ -548,7 +548,7 @@ func TestRouteTablePolicyOnly(t *testing.T) {
 	gwIPOut, err := ExecOutputTrim(fmt.Sprintf("ip addr show %s", gwName))
 	assert.NoError(t, err)
 	gwIP := net.IPNet{
-		IP:   nodeConfig.NodeIPAddr.IP,
+		IP:   nodeConfig.NodeIPv4Addr.IP,
 		Mask: net.CIDRMask(32, 32),
 	}
 	assert.Contains(t, gwIPOut, gwIP.String())
@@ -607,7 +607,7 @@ func TestIPv6RoutesAndNeighbors(t *testing.T) {
 		Name:          "test",
 		PodIPv4CIDR:   podCIDR,
 		PodIPv6CIDR:   ipv6Subnet,
-		NodeIPAddr:    nodeIP,
+		NodeIPv4Addr:  nodeIPv4,
 		GatewayConfig: dualGWConfig,
 	}
 	err = routeClient.Initialize(dualNodeConfig, func() {})

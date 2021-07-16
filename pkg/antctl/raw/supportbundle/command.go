@@ -300,13 +300,17 @@ func createAgentClients(k8sClientset kubernetes.Interface, antreaClientset antre
 		if !ok {
 			continue
 		}
-		ip, err := k8s.GetNodeAddr(&node)
+		ips, err := k8s.GetNodeAddrs(&node)
 		if err != nil {
 			klog.Warningf("Error when parsing IP of Node %s", node.Name)
 			continue
 		}
 		cfg := rest.CopyConfig(cfgTmpl)
-		cfg.Host = net.JoinHostPort(ip.String(), port)
+		if len(ips) == 0 {
+			klog.Warningf("There is no Node Addresses")
+			continue
+		}
+		cfg.Host = net.JoinHostPort(ips[0].String(), port)
 		client, err := rest.RESTClientFor(cfg)
 		if err != nil {
 			klog.Warningf("Error when creating agent client for node: %s", node.Name)
@@ -327,14 +331,17 @@ func createControllerClient(k8sClientset kubernetes.Interface, antreaClientset a
 	if err != nil {
 		return nil, fmt.Errorf("error when searching the Node of the controller: %w", err)
 	}
-	var controllerNodeIP net.IP
-	controllerNodeIP, err = k8s.GetNodeAddr(controllerNode)
+	var controllerNodeIPs []net.IP
+	controllerNodeIPs, err = k8s.GetNodeAddrs(controllerNode)
 	if err != nil {
 		return nil, fmt.Errorf("error when parsing controllre IP: %w", err)
 	}
 
 	cfg := rest.CopyConfig(cfgTmpl)
-	cfg.Host = net.JoinHostPort(controllerNodeIP.String(), fmt.Sprint(controllerInfo.APIPort))
+	if len(controllerNodeIPs) == 0 {
+		return nil, fmt.Errorf("error there is no NodeIP")
+	}
+	cfg.Host = net.JoinHostPort(controllerNodeIPs[0].String(), fmt.Sprint(controllerInfo.APIPort))
 	controllerClient, err := rest.RESTClientFor(cfg)
 	if err != nil {
 		klog.Warningf("Error when creating controller client for node: %s", controllerInfo.NodeRef.Name)
